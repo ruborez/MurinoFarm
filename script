@@ -1,0 +1,471 @@
+-- Murino Horror | Ultra UI (Rayfield) | Solara/Xeno
+-- Вставь и запусти.
+
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local Window = Rayfield:CreateWindow({
+    Name = "Murino Farm Pro",
+    LoadingTitle = "Murino Farm Pro",
+    LoadingSubtitle = "ruborez",
+    ConfigurationSaving = {Enabled = true, FolderName = "MurinoFarmPro"},
+    Discord = {Enabled = false},
+    KeySystem = false
+})
+
+local Players = game:GetService("Players")
+local p = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+
+-- ============================ НАСТРОЙКИ ============================
+local Settings = {
+    AutoFarm = false,
+    Delay = 0.3,
+    Mode = "Newest",
+    ESPPlayers = false,
+    ESPMonsters = false,
+    ESPManiac = false,
+    AntiRush = false,
+    AutoArthur = false,
+    WalkSpeed = 16,
+    ManiacName = nil,
+    SelectedManiac = nil
+}
+
+-- ============================ ТРИГГЕРЫ ДЛЯ АВТОФАРМА ============================
+local triggers, visited, order = {}, {}, 0
+local startPos, lastPos, currentProgress = nil, nil, 0
+
+local function isTrigger(o)
+    return o:IsA("BasePart") and o.Name == "Trigger" and o.Transparency >= 0.5
+end
+
+local function addTrigger(o)
+    order += 1
+    table.insert(triggers, {part=o, order=order})
+end
+
+for _, o in ipairs(workspace:GetDescendants()) do
+    if isTrigger(o) then addTrigger(o) end
+end
+
+workspace.DescendantAdded:Connect(function(o)
+    if isTrigger(o) then addTrigger(o) end
+end)
+
+-- ============================ ОБЩИЕ ФУНКЦИИ ============================
+local function getRoot()
+    local char = p.Character
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function teleportTo(pos)
+    local root = getRoot()
+    if root then
+        root.CFrame = CFrame.new(pos)
+    end
+end
+
+-- ============================ АВТОФАРМ ============================
+local function pickTarget(hPos)
+    local best, bestScore = nil, math.huge
+    local dir = Vector3.zero
+    if startPos then
+        dir = (hPos - startPos)
+        if dir.Magnitude < 0.1 then dir = Vector3.new(1,0,0) end
+        dir = dir.Unit
+    end
+
+    for _, t in ipairs(triggers) do
+        local o = t.part
+        if o and o.Parent and not visited[o] then
+            local po = o.Position
+            if Settings.Mode == "Newest" then
+                local score = -t.order
+                if score < bestScore then bestScore, best = score, o end
+            elseif Settings.Mode == "Progress" then
+                local fromStart = (po - startPos).Magnitude
+                if fromStart > currentProgress + 2 then
+                    local d = (po - hPos).Magnitude
+                    local score = d - fromStart*0.5
+                    if score < bestScore then bestScore, best = score, o end
+                end
+            elseif Settings.Mode == "Direction" then
+                local ddir = dir
+                if lastPos and (hPos-lastPos).Magnitude > 0.5 then ddir = (hPos-lastPos).Unit end
+                local proj = (po - hPos):Dot(ddir)
+                if proj > 1 then
+                    local d = (po - hPos).Magnitude
+                    local score = d - proj*0.5
+                    if score < bestScore then bestScore, best = score, o end
+                end
+            else -- Nearest
+                local d = (po - hPos).Magnitude
+                if d < bestScore then bestScore, best = d, o end
+            end
+        end
+    end
+    return best
+end
+
+local function markPair(target)
+    visited[target] = true
+    local tp = target.Position
+    for _, t in ipairs(triggers) do
+        local o = t.part
+        if o and o.Parent and (o.Position - tp).Magnitude <= 10 then visited[o] = true end
+    end
+end
+
+local function farmLoop()
+    while Settings.AutoFarm do
+        task.wait(Settings.Delay)
+        local h = getRoot()
+        if h then
+            local hPos = h.Position
+            if not startPos then startPos, lastPos, currentProgress = hPos, hPos, 0 end
+            local target = pickTarget(hPos)
+            if target then
+                markPair(target)
+                h.CFrame = CFrame.new(target.Position)
+                lastPos = target.Position
+                local dist = (target.Position - startPos).Magnitude
+                if dist > currentProgress then currentProgress = dist end
+            else
+                lastPos = hPos
+            end
+        end
+    end
+end
+
+p.CharacterAdded:Connect(function()
+    startPos, lastPos, currentProgress, visited = nil, nil, 0, {}
+end)
+
+-- ============================ ESP СИСТЕМА ============================
+local espObjects = {} -- {highlight, part, type}
+
+local function clearESP()
+    for _, obj in ipairs(espObjects) do
+        if obj.highlight then obj.highlight:Destroy() end
+        if obj.frame then obj.frame:Destroy() end
+    end
+    espObjects = {}
+end
+
+local function updateESP()
+    clearESP()
+    local myChar = p.Character
+    if not myChar then return end
+    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return end
+
+    -- ESP игроков
+    if Settings.ESPPlayers or Settings.ESPManiac then
+        for _, other in ipairs(Players:GetPlayers()) do
+            if other ~= p and other.Character then
+                local hr = other.Character:FindFirstChild("HumanoidRootPart")
+                if hr then
+                    local color = Color3.fromRGB(255, 0, 0) -- красный для всех
+                    if Settings.ESPManiac and (Settings.SelectedManiac == other or (Settings.ManiacName and other.Name:lower():find(Settings.ManiacName:lower()))) then
+                        color = Color3.fromRGB(255, 0, 255) -- пурпурный для маньяка
+                    end
+                    local h = Instance.new("Highlight")
+                    h.FillColor = color
+                    h.FillTransparency = 0.5
+                    h.OutlineColor = color
+                    h.OutlineTransparency = 0
+                    h.Parent = other.Character
+                    table.insert(espObjects, {highlight = h, part = hr, type = "player"})
+
+                    -- Метка с расстоянием
+                    local bill = Instance.new("BillboardGui")
+                    bill.Size = UDim2.new(0, 80, 0, 20)
+                    bill.Adornee = hr
+                    bill.AlwaysOnTop = true
+                    local label = Instance.new("TextLabel", bill)
+                    label.Size = UDim2.new(1,0,1,0)
+                    label.BackgroundTransparency = 1
+                    label.TextColor3 = color
+                    label.Font = Enum.Font.GothamBold
+                    label.TextSize = 14
+                    label.Text = string.format("%.0f m", (hr.Position - myRoot.Position).Magnitude)
+                    bill.Parent = other.Character
+                    table.insert(espObjects, {highlight = nil, frame = bill, part = hr, type = "player"})
+                end
+            end
+        end
+    end
+
+    -- ESP монстров (поиск NPC)
+    if Settings.ESPMonsters then
+        for _, v in ipairs(workspace:GetDescendants()) do
+            if v:IsA("Model") and v.Name:lower():find("monster") or v.Name:lower():find("zombie") or v.Name:lower():find("creature") then
+                local hr = v:FindFirstChild("HumanoidRootPart") or v:FindFirstChild("Torso") or v:FindFirstChild("UpperTorso")
+                if hr and hr.Parent then
+                    local h = Instance.new("Highlight")
+                    h.FillColor = Color3.fromRGB(255, 255, 0) -- жёлтый
+                    h.FillTransparency = 0.5
+                    h.OutlineColor = Color3.fromRGB(255, 255, 0)
+                    h.OutlineTransparency = 0
+                    h.Parent = v
+                    table.insert(espObjects, {highlight = h, part = hr, type = "monster"})
+                end
+            end
+        end
+    end
+end
+
+-- ============================ АНТИ РАШ ============================
+local function findClosestCloset()
+    local myPos = getRoot() and getRoot().Position
+    if not myPos then return nil end
+    local closest, bestD = nil, math.huge
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("BasePart") and v.Name:lower():find("closet") or v.Name:lower():find("шкаф") or v.Name:lower():find("shield") then
+            local dist = (v.Position - myPos).Magnitude
+            if dist < bestD then
+                bestD = dist
+                closest = v
+            end
+        end
+    end
+    return closest
+end
+
+local function isRushActive()
+    -- если какой-то другой игрок движется со скоростью > 50
+    for _, other in ipairs(Players:GetPlayers()) do
+        if other ~= p and other.Character then
+            local hr = other.Character:FindFirstChild("HumanoidRootPart")
+            local hum = other.Character:FindFirstChild("Humanoid")
+            if hr and hum then
+                if hum.MoveDirection.Magnitude > 0 and hr.Velocity.Magnitude > 50 then
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+local function antiRushLoop()
+    while Settings.AntiRush do
+        task.wait(0.5)
+        if isRushActive() then
+            local closet = findClosestCloset()
+            if closet then
+                teleportTo(closet.Position + Vector3.new(0, 3, 0))
+                task.wait(1) -- подождать, пока раш пройдёт
+            end
+        end
+    end
+end
+
+-- ============================ АВТО ПРИВЕТ АРТУРУ ============================
+local function findArthur()
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("Model") and (v.Name:lower():find("arthur") or v.Name:lower():find("артур")) then
+            return v
+        end
+    end
+    return nil
+end
+
+local function autoArthurLoop()
+    while Settings.AutoArthur do
+        task.wait(5) -- проверяем каждые 5 сек
+        local arthur = findArthur()
+        if arthur then
+            local hr = arthur:FindFirstChild("HumanoidRootPart") or arthur:FindFirstChild("Torso") or arthur:FindFirstChild("UpperTorso")
+            if hr then
+                local myRoot = getRoot()
+                if myRoot then
+                    local myPos = myRoot.Position
+                    teleportTo(hr.Position + Vector3.new(0, 2, 0))
+                    task.wait(1)
+                    teleportTo(myPos)
+                end
+            end
+        end
+    end
+end
+
+-- ============================ WALKSPEED ============================
+RunService.RenderStepped:Connect(function()
+    if p.Character then
+        local hum = p.Character:FindFirstChild("Humanoid")
+        if hum and hum.WalkSpeed ~= Settings.WalkSpeed then
+            hum.WalkSpeed = Settings.WalkSpeed
+        end
+    end
+end)
+
+-- ============================ ESP ОБНОВЛЕНИЕ ============================
+RunService.RenderStepped:Connect(function()
+    if Settings.ESPPlayers or Settings.ESPMonsters or Settings.ESPManiac then
+        updateESP()
+    else
+        clearESP()
+    end
+end)
+
+-- ============================ RAYFIELD UI ============================
+local TabSurvivor = Window:CreateTab("Выживший", 4483362458)
+local TabManiac = Window:CreateTab("Маньяк", 4483362458)
+
+-- ---------- ВКЛАДКА ВЫЖИВШИЙ ----------
+local SurvivorSection = TabSurvivor:CreateSection("Автофарм")
+local FarmToggle = TabSurvivor:CreateToggle({
+    Name = "Автофарм",
+    CurrentValue = false,
+    Flag = "farm",
+    Callback = function(v)
+        Settings.AutoFarm = v
+        if v then task.spawn(farmLoop) end
+    end
+})
+
+local ModeDropdown = TabSurvivor:CreateDropdown({
+    Name = "Режим выбора",
+    Options = {"Newest", "Progress", "Direction", "Nearest"},
+    CurrentOption = "Newest",
+    Flag = "mode",
+    Callback = function(opt) Settings.Mode = opt end
+})
+
+local DelaySlider = TabSurvivor:CreateSlider({
+    Name = "Задержка (сек)",
+    Range = {0.05, 1},
+    Increment = 0.01,
+    Suffix = "сек",
+    CurrentValue = 0.3,
+    Flag = "delay",
+    Callback = function(v) Settings.Delay = v end
+})
+
+local SurvivorSection2 = TabSurvivor:CreateSection("Защита")
+local AntiRushToggle = TabSurvivor:CreateToggle({
+    Name = "Анти раш (в шкаф)",
+    CurrentValue = false,
+    Flag = "antirush",
+    Callback = function(v)
+        Settings.AntiRush = v
+        if v then task.spawn(antiRushLoop) end
+    end
+})
+
+local AutoArthurToggle = TabSurvivor:CreateToggle({
+    Name = "Авто привет Артуру",
+    CurrentValue = false,
+    Flag = "autoarthur",
+    Callback = function(v)
+        Settings.AutoArthur = v
+        if v then task.spawn(autoArthurLoop) end
+    end
+})
+
+local SurvivorSection3 = TabSurvivor:CreateSection("ESP")
+local ESPPlayersToggle = TabSurvivor:CreateToggle({
+    Name = "ESP игроков",
+    CurrentValue = false,
+    Flag = "esp_players",
+    Callback = function(v) Settings.ESPPlayers = v end
+})
+
+local ESPMonstersToggle = TabSurvivor:CreateToggle({
+    Name = "ESP монстров",
+    CurrentValue = false,
+    Flag = "esp_monsters",
+    Callback = function(v) Settings.ESPMonsters = v end
+})
+
+local SurvivorSection4 = TabSurvivor:CreateSection("Скорость")
+local WalkSpeedSlider = TabSurvivor:CreateSlider({
+    Name = "WalkSpeed",
+    Range = {0, 200},
+    Increment = 1,
+    Suffix = "",
+    CurrentValue = 16,
+    Flag = "walkspeed",
+    Callback = function(v) Settings.WalkSpeed = v end
+})
+
+local ResetBtn = TabSurvivor:CreateButton({
+    Name = "Сбросить прогресс",
+    Callback = function()
+        visited = {}
+        startPos, lastPos, currentProgress = nil, nil, 0
+    end
+})
+
+-- ---------- ВКЛАДКА МАНЬЯК ----------
+local ManiacSection = TabManiac:CreateSection("Автофарм")
+local FarmToggle2 = TabManiac:CreateToggle({
+    Name = "Автофарм (маньяк)",
+    CurrentValue = false,
+    Flag = "farm_maniac",
+    Callback = function(v)
+        Settings.AutoFarm = v
+        if v then task.spawn(farmLoop) end
+    end
+})
+
+local ModeDropdown2 = TabManiac:CreateDropdown({
+    Name = "Режим выбора",
+    Options = {"Newest", "Progress", "Direction", "Nearest"},
+    CurrentOption = "Newest",
+    Flag = "mode_maniac",
+    Callback = function(opt) Settings.Mode = opt end
+})
+
+local DelaySlider2 = TabManiac:CreateSlider({
+    Name = "Задержка (сек)",
+    Range = {0.05, 1},
+    Increment = 0.01,
+    Suffix = "сек",
+    CurrentValue = 0.3,
+    Flag = "delay_maniac",
+    Callback = function(v) Settings.Delay = v end
+})
+
+local ManiacSection2 = TabManiac:CreateSection("ESP маньяка")
+local ESPManiacToggle = TabManiac:CreateToggle({
+    Name = "ESP маньяка (улучш.)",
+    CurrentValue = false,
+    Flag = "esp_maniac",
+    Callback = function(v)
+        Settings.ESPManiac = v
+        Settings.ESPPlayers = v -- если включен ESP маньяка, также включаем ESP игроков
+    end
+})
+
+local ManiacNameInput = TabManiac:CreateInput({
+    Name = "Имя маньяка (по желанию)",
+    PlaceholderText = "Например: Maniac",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(text)
+        Settings.ManiacName = text
+    end
+})
+
+local SelectManiacBtn = TabManiac:CreateButton({
+    Name = "Выбрать маньяка (кто под курсором)",
+    Callback = function()
+        local mouse = p:GetMouse()
+        local target = mouse.Target
+        if target then
+            local model = target:FindFirstAncestorOfClass("Model")
+            if model and model:IsA("Model") and model ~= p.Character then
+                Settings.SelectedManiac = Players:GetPlayerFromCharacter(model)
+                if Settings.SelectedManiac then
+                    Rayfield:Notify("Маньяк выбран: "..Settings.SelectedManiac.Name)
+                else
+                    Rayfield:Notify("Это не игрок")
+                end
+            end
+        end
+    end
+})
+
+-- ============================ УВЕДОМЛЕНИЕ О ЗАГРУЗКЕ ============================
+Rayfield:Notify("Скрипт загружен! Включи ESP и наслаждайся.")
