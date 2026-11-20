@@ -1,11 +1,11 @@
 -- Murino Horror | Ultra UI (Rayfield) | Solara/Xeno
--- Обновление: FullBright + исправленный ESP монстров
+-- Исправлено: Авто Артур + защита от лестницы/бананов
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
     Name = "Murino Farm Pro",
     LoadingTitle = "Murino Farm Pro",
-    LoadingSubtitle = "ruborez",
+    LoadingSubtitle = "by ruborez",
     ConfigurationSaving = {Enabled = true, FolderName = "MurinoFarmPro"},
     Discord = {Enabled = false},
     KeySystem = false
@@ -29,7 +29,8 @@ local Settings = {
     WalkSpeed = 16,
     FullBright = false,
     ManiacName = nil,
-    SelectedManiac = nil
+    SelectedManiac = nil,
+    SkipLadder = true -- пропускать лестницу/бананы
 }
 
 -- ============================ ТРИГГЕРЫ ДЛЯ АВТОФАРМА ============================
@@ -66,6 +67,20 @@ local function teleportTo(pos)
     end
 end
 
+-- Проверка, находится ли позиция в опасной зоне (лестница/бананы)
+local function isDangerous(pos)
+    if not Settings.SkipLadder then return false end
+    -- Проверяем, есть ли рядом объекты "Ladder", "Banana" или "Stair"
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("BasePart") and (v.Name:lower():find("ladder") or v.Name:lower():find("banana") or v.Name:lower():find("stair")) then
+            if (v.Position - pos).Magnitude < 10 then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 -- ============================ АВТОФАРМ ============================
 local function pickTarget(hPos)
     local best, bestScore = nil, math.huge
@@ -80,6 +95,11 @@ local function pickTarget(hPos)
         local o = t.part
         if o and o.Parent and not visited[o] then
             local po = o.Position
+            -- пропускаем опасные зоны
+            if isDangerous(po) then
+                visited[o] = true
+                continue
+            end
             if Settings.Mode == "Newest" then
                 local score = -t.order
                 if score < bestScore then bestScore, best = score, o end
@@ -127,7 +147,8 @@ local function farmLoop()
             local target = pickTarget(hPos)
             if target then
                 markPair(target)
-                h.CFrame = CFrame.new(target.Position)
+                -- Телепорт с поднятием на 5 блоков, чтобы перелететь препятствия
+                h.CFrame = CFrame.new(target.Position + Vector3.new(0, 5, 0))
                 lastPos = target.Position
                 local dist = (target.Position - startPos).Magnitude
                 if dist > currentProgress then currentProgress = dist end
@@ -143,7 +164,7 @@ p.CharacterAdded:Connect(function()
 end)
 
 -- ============================ ESP СИСТЕМА ============================
-local espObjects = {} -- {highlight, part, type, model}
+local espObjects = {}
 local lastEspUpdate = 0
 
 local function clearESP()
@@ -155,7 +176,6 @@ local function clearESP()
 end
 
 local function updateESP()
-    -- Обновляем не чаще 1 раза в секунду, чтобы не лагать
     if tick() - lastEspUpdate < 1 then return end
     lastEspUpdate = tick()
     clearESP()
@@ -165,15 +185,14 @@ local function updateESP()
     local myRoot = myChar:FindFirstChild("HumanoidRootPart")
     if not myRoot then return end
 
-    -- ESP игроков и маньяка
     if Settings.ESPPlayers or Settings.ESPManiac then
         for _, other in ipairs(Players:GetPlayers()) do
             if other ~= p and other.Character then
                 local hr = other.Character:FindFirstChild("HumanoidRootPart")
                 if hr then
-                    local color = Color3.fromRGB(255, 0, 0) -- красный
+                    local color = Color3.fromRGB(255, 0, 0)
                     if Settings.ESPManiac and (Settings.SelectedManiac == other or (Settings.ManiacName and other.Name:lower():find(Settings.ManiacName:lower()))) then
-                        color = Color3.fromRGB(255, 0, 255) -- пурпурный
+                        color = Color3.fromRGB(255, 0, 255)
                     end
                     local h = Instance.new("Highlight")
                     h.FillColor = color
@@ -201,7 +220,6 @@ local function updateESP()
         end
     end
 
-    -- ESP монстров (все модели с Humanoid, кроме игроков)
     if Settings.ESPMonsters then
         local playerCharacters = {}
         for _, plr in ipairs(Players:GetPlayers()) do
@@ -212,7 +230,7 @@ local function updateESP()
                 local hr = v:FindFirstChild("HumanoidRootPart")
                 if hr then
                     local h = Instance.new("Highlight")
-                    h.FillColor = Color3.fromRGB(255, 255, 0) -- жёлтый
+                    h.FillColor = Color3.fromRGB(255, 255, 0)
                     h.FillTransparency = 0.5
                     h.OutlineColor = Color3.fromRGB(255, 255, 0)
                     h.OutlineTransparency = 0
@@ -296,11 +314,20 @@ local function antiRushLoop()
     end
 end
 
--- ============================ АВТО ПРИВЕТ АРТУРУ ============================
+-- ============================ АВТО ПРИВЕТ АРТУРУ (исправлено) ============================
 local function findArthur()
+    local names = {"arthur", "артур", "npcharacter", "npc"}
     for _, v in ipairs(workspace:GetDescendants()) do
-        if v:IsA("Model") and (v.Name:lower():find("arthur") or v.Name:lower():find("артур")) then
-            return v
+        if v:IsA("Model") and v:FindFirstChild("Humanoid") then
+            local name = v.Name:lower()
+            for _, n in ipairs(names) do
+                if name:find(n) then
+                    -- убедимся, что это не игрок
+                    if not Players:GetPlayerFromCharacter(v) then
+                        return v
+                    end
+                end
+            end
         end
     end
     return nil
@@ -316,7 +343,7 @@ local function autoArthurLoop()
                 local myRoot = getRoot()
                 if myRoot then
                     local myPos = myRoot.Position
-                    teleportTo(hr.Position + Vector3.new(0, 2, 0))
+                    teleportTo(hr.Position + Vector3.new(0, 3, 0))
                     task.wait(1)
                     teleportTo(myPos)
                 end
@@ -367,6 +394,13 @@ local DelaySlider = TabSurvivor:CreateSlider({
     CurrentValue = 0.3,
     Flag = "delay",
     Callback = function(v) Settings.Delay = v end
+})
+
+local SkipLadderToggle = TabSurvivor:CreateToggle({
+    Name = "Пропускать лестницу/бананы",
+    CurrentValue = true,
+    Flag = "skip_ladder",
+    Callback = function(v) Settings.SkipLadder = v end
 })
 
 local SurvivorSection2 = TabSurvivor:CreateSection("Защита")
@@ -504,7 +538,7 @@ local SelectManiacBtn = TabManiac:CreateButton({
 })
 
 -- ============================ УВЕДОМЛЕНИЕ ============================
-Rayfield:Notify("Скрипт загружен! Включи FullBright и ESP монстров – всё работает.")
+Rayfield:Notify("Скрипт загружен! Авто Артур и защита от лестницы работают.")
 
 -- Обновление ESP по таймеру
 task.spawn(function()
