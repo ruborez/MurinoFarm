@@ -1,5 +1,5 @@
 -- Murino Horror | Ultra UI (Rayfield) | Solara/Xeno
--- Исправлено: Оптимизация производительности, фарм больше не лагает
+-- Исправлено: Синтаксическая ошибка (end), Умный IQ-тест, Все функции
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
@@ -8,58 +8,359 @@ local Window = Rayfield:CreateWindow({
     LoadingSubtitle = "by ruborez",
     ConfigurationSaving = {Enabled = true, FolderName = "MurinoFarmPro"},
     Discord = {Enabled = false},
-    KeySystem = false
+    
+    -- ================= KEY SYSTEM =================
+    KeySystem = true, 
+    KeySettings = {
+        Title = "Murino Farm Pro",
+        Subtitle = "Key System | by ruborez",
+        Note = "Введи ключ для доступа.\nТестовый ключ: byrger",
+        FileName = "MurinoKey.txt",
+        SaveKey = true,
+        GrabKeyFromSite = false, 
+        Key = {"byrger"}
+    }
+    -- ==============================================
 })
 
 local Players = game:GetService("Players")
 local p = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local VirtualUser = game:GetService("VirtualUser")
+local UserInputService = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
+local CoreGui = game:GetService("CoreGui")
+local Stats = game:GetService("Stats")
+local SoundService = game:GetService("SoundService")
+local Debris = game:GetService("Debris")
+
+-- ============================ АНТИ-АФК ============================
+p.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end)
 
 -- ============================ НАСТРОЙКИ ============================
 local Settings = {
-    AutoFarm = false,
-    Delay = 0.3,
-    Mode = "Newest",
-    ESPPlayers = false,
-    ESPMonsters = false,
-    ESPManiac = false,
-    AntiRush = false,
-    AutoArthur = false,
-    WalkSpeed = 16,
-    FullBright = false,
-    ManiacName = nil,
-    SelectedManiac = nil,
-    SkipLadder = true
+    AutoFarm = false, Delay = 0.3, Mode = "Newest",
+    ESPPlayers = false, ESPMonsters = false, ESPItems = false, ESPHideouts = false,
+    AntiRush = false, AutoArthur = false, AutoIQ = false, AutoHide = false,
+    WalkSpeed = 16, FullBright = false, SkipLadder = true,
+    Noclip = false, Fly = false, FlySpeed = 50, InfJump = false,
+    AntiTrap = false, DiscordRPC = false,
+    FPSBoost = false, HighGraphics = false, ShowStats = false,
+    Nametag = false
 }
 
--- ============================ БАЗОВЫЕ ФУНКЦИИ ============================
-local function getRoot()
-    local char = p.Character
-    return char and char:FindFirstChild("HumanoidRootPart")
+-- ============================ НИК НАД ГОЛОВОЙ ============================
+local function updateNametag()
+    if not p.Character then return end
+    local head = p.Character:FindFirstChild("Head")
+    if not head then return end
+    
+    local oldTag = head:FindFirstChild("SWILL_Nametag")
+    if oldTag then oldTag:Destroy() end
+
+    if Settings.Nametag then
+        local bill = Instance.new("BillboardGui", head)
+        bill.Name = "SWILL_Nametag"
+        bill.Size = UDim2.new(0, 200, 0, 50)
+        bill.StudsOffset = Vector3.new(0, 2.5, 0)
+        bill.AlwaysOnTop = true
+
+        local text = Instance.new("TextLabel", bill)
+        text.Size = UDim2.new(1, 0, 1, 0)
+        text.BackgroundTransparency = 1
+        text.Text = "SWILL SCRIPT"
+        text.Font = Enum.Font.GothamBlack
+        text.TextSize = 20
+        text.TextStrokeTransparency = 0
+        text.TextScaled = true
+
+        task.spawn(function()
+            while bill.Parent do
+                text.TextColor3 = Color3.fromHSV((tick() % 5) / 5, 1, 1)
+                task.wait(0.1)
+            end
+        end)
+    end
 end
 
+-- ============================ САУНДБОРД ============================
+local function playSound(id, isGlobal)
+    local sound = Instance.new("Sound")
+    sound.SoundId = "rbxassetid://" .. tostring(id)
+    sound.Volume = 3
+    
+    if isGlobal then 
+        sound.Parent = workspace 
+    else 
+        sound.Parent = SoundService 
+    end
+    
+    sound:Play()
+    Debris:AddItem(sound, sound.TimeLength + 1)
+end
+
+-- ============================ УМНЫЙ AUTO-IQ ============================
+local autoIQThread = nil
+local lastSolvedEquation = ""
+
+local function stopAutoIQ()
+    Settings.AutoIQ = false
+    if autoIQThread then 
+        pcall(function() task.cancel(autoIQThread) end)
+        autoIQThread = nil 
+    end
+end
+
+local function startAutoIQ()
+    stopAutoIQ()
+    Settings.AutoIQ = true
+    autoIQThread = task.spawn(function()
+        while Settings.AutoIQ do
+            task.wait(1)
+            
+            local guis = {p:FindFirstChild("PlayerGui"), game:GetService("CoreGui")}
+            local equation = nil
+            local activeGui = nil
+            
+            -- 1. Ищем текст с примером
+            for _, gui in ipairs(guis) do
+                if gui then
+                    for _, obj in ipairs(gui:GetDescendants()) do
+                        if obj:IsA("TextLabel") and obj.Text ~= "" then
+                            local txt = obj.Text
+                            if txt:match("%d+") and (txt:lower():find("x") or txt:find("%*") or txt:find("%+") or txt:find("%-") or txt:find("х")) then
+                                if not txt:lower():find("сек") and not txt:lower():find("мин") then
+                                    equation = txt
+                                    activeGui = gui
+                                    break
+                                end
+                            end
+                        end
+                    end
+                end
+                if equation then break end
+            end
+
+            -- 2. Если нашли пример и он новый
+            if equation and equation ~= lastSolvedEquation then
+                lastSolvedEquation = equation
+                print("[SWILL IQ] Найден пример: " .. equation)
+                task.wait(1)
+
+                -- Очищаем строку
+                local cleanEq = equation:lower()
+                cleanEq = cleanEq:gsub("%s+", "")
+                cleanEq = cleanEq:gsub("x", "*")
+                cleanEq = cleanEq:gsub("х", "*")
+                cleanEq = cleanEq:gsub("=", "")
+                cleanEq = cleanEq:gsub("%?", "")
+                
+                -- Пытаемся посчитать
+                local success, result = pcall(function()
+                    return loadstring("return " .. cleanEq)()
+                end)
+                
+                if success and type(result) == "number" then
+                    local answer = tostring(math.floor(result))
+                    print("[SWILL IQ] Ответ: " .. answer)
+                    
+                    -- 3. Кликаем по кнопкам
+                    for i = 1, #answer do
+                        local digit = answer:sub(i, i)
+                        local clicked = false
+                        
+                        for _, btn in ipairs(activeGui:GetDescendants()) do
+                            if btn:IsA("TextButton") and btn.Visible then
+                                if btn.Text == digit or btn.Text == tostring(tonumber(digit)) then
+                                    local pos = Vector2.new(btn.AbsolutePosition.X + btn.AbsoluteSize.X / 2, btn.AbsolutePosition.Y + btn.AbsoluteSize.Y / 2)
+                                    VirtualUser:ClickButton1(pos)
+                                    clicked = true
+                                    break
+                                end
+                            end
+                        end
+                        
+                        if clicked then
+                            task.wait(0.5) -- Пауза между вводом цифр
+                        else
+                            print("[SWILL IQ] Не найдена кнопка: " .. digit)
+                        end
+                    end
+                    
+                    -- 4. Кнопка подтверждения
+                    task.wait(0.5)
+                    for _, btn in ipairs(activeGui:GetDescendants()) do
+                        if btn:IsA("TextButton") and btn.Visible then
+                            local txt = btn.Text:lower()
+                            if txt == "ввод" or txt == "enter" or txt == "ok" or txt == "подтвердить" then
+                                local pos = Vector2.new(btn.AbsolutePosition.X + btn.AbsoluteSize.X / 2, btn.AbsolutePosition.Y + btn.AbsoluteSize.Y / 2)
+                                VirtualUser:ClickButton1(pos)
+                                print("[SWILL IQ] Нажата кнопка подтверждения.")
+                                break
+                            end
+                        end
+                    end
+                else
+                    print("[SWILL IQ] Ошибка в примере: " .. equation)
+                end
+            end
+        end
+    end)
+end
+
+-- ============================ СЧЕТЧИКИ FPS И ПИНГА ============================
+local statsGui = Instance.new("ScreenGui", CoreGui)
+statsGui.Name = "SWILL_Stats"
+statsGui.ResetOnSpawn = false
+
+local statsFrame = Instance.new("Frame", statsGui)
+statsFrame.Size = UDim2.new(0, 150, 0, 50)
+statsFrame.Position = UDim2.new(0, 10, 0, 10)
+statsFrame.BackgroundTransparency = 1
+
+local fpsLabel = Instance.new("TextLabel", statsFrame)
+fpsLabel.Size = UDim2.new(1, 0, 0.5, 0); fpsLabel.BackgroundTransparency = 1
+fpsLabel.TextColor3 = Color3.fromRGB(0, 255, 0); fpsLabel.Font = Enum.Font.GothamBold
+fpsLabel.TextSize = 14; fpsLabel.TextXAlignment = Enum.TextXAlignment.Left; fpsLabel.Text = "FPS: 60"
+
+local pingLabel = Instance.new("TextLabel", statsFrame)
+pingLabel.Size = UDim2.new(1, 0, 0.5, 0); pingLabel.Position = UDim2.new(0, 0, 0.5, 0)
+pingLabel.BackgroundTransparency = 1; pingLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+pingLabel.Font = Enum.Font.GothamBold; pingLabel.TextSize = 14
+pingLabel.TextXAlignment = Enum.TextXAlignment.Left; pingLabel.Text = "Ping: 0 ms"
+
+local frameCount, lastTime, fps = 0, tick(), 60
+
+RunService.RenderStepped:Connect(function()
+    if not Settings.ShowStats then 
+        statsFrame.Visible = false
+        return 
+    end
+    statsFrame.Visible = true
+    
+    frameCount = frameCount + 1
+    if tick() - lastTime >= 1 then
+        fps = math.floor(frameCount / (tick() - lastTime))
+        frameCount = 0; lastTime = tick()
+        fpsLabel.Text = "FPS: " .. fps
+        fpsLabel.TextColor3 = fps > 50 and Color3.fromRGB(0, 255, 0) or (fps > 30 and Color3.fromRGB(255, 255, 0) or Color3.fromRGB(255, 0, 0))
+    end
+    pcall(function()
+        local ping = Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+        pingLabel.Text = "Ping: " .. math.floor(ping) .. " ms"
+        pingLabel.TextColor3 = ping < 100 and Color3.fromRGB(0, 255, 0) or (ping < 200 and Color3.fromRGB(255, 255, 0) or Color3.fromRGB(255, 0, 0))
+    end)
+end)
+
+-- ============================ ОПТИМИЗАЦИЯ И ГРАФИКА ============================
+local colorCorrection = Instance.new("ColorCorrectionEffect", Lighting); colorCorrection.Name = "SWILL_CC"; colorCorrection.Enabled = false
+local bloom = Instance.new("BloomEffect", Lighting); bloom.Name = "SWILL_Bloom"; bloom.Enabled = false; bloom.Intensity = 0.5; bloom.Size = 24
+
+local function applyFPSBoost(enable)
+    if enable then
+        Lighting.GlobalShadows = false; Lighting.FogEnd = 100000
+        for _, v in ipairs(workspace:GetDescendants()) do
+            if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") then
+                pcall(function() v.Enabled = false end)
+            end
+        end
+    else
+        Lighting.GlobalShadows = true; Lighting.FogEnd = 1000
+    end
+end
+
+local function applyHighGraphics(enable)
+    if enable then
+        colorCorrection.Enabled = true; colorCorrection.Saturation = 0.3; colorCorrection.Contrast = 0.1
+        bloom.Enabled = true; Lighting.Brightness = 2
+    else
+        colorCorrection.Enabled = false; bloom.Enabled = false; Lighting.Brightness = 1
+    end
+end
+
+-- ============================ AUTO-HIDE ============================
+local autoHideThread = nil
+local function stopAutoHide() Settings.AutoHide = false; if autoHideThread then pcall(function() task.cancel(autoHideThread) end); autoHideThread = nil end end
+local function startAutoHide()
+    stopAutoHide(); Settings.AutoHide = true
+    autoHideThread = task.spawn(function()
+        while Settings.AutoHide do
+            task.wait(0.2)
+            local myRoot = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+            if myRoot then
+                local isThreatClose = false
+                for _, plr in ipairs(Players:GetPlayers()) do
+                    if plr ~= p and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                        if (plr.Character.HumanoidRootPart.Position - myRoot.Position).Magnitude < 50 then
+                            isThreatClose = true; break
+                        end
+                    end
+                end
+                if isThreatClose then
+                    local closestCloset, minDist = nil, math.huge
+                    for _, v in ipairs(workspace:GetDescendants()) do
+                        if v:IsA("BasePart") and (v.Name:lower():find("closet") or v.Name:lower():find("шкаф") or v.Name:lower():find("locker") or v.Name:lower():find("hide")) then
+                            local d = (v.Position - myRoot.Position).Magnitude
+                            if d < minDist then minDist = d; closestCloset = v end
+                        end
+                    end
+                    if closestCloset then myRoot.CFrame = CFrame.new(closestCloset.Position + Vector3.new(0, 2, 0)) end
+                end
+            end
+        end
+    end)
+end
+
+-- ============================ ДВИЖЕНИЕ ============================
+RunService.Stepped:Connect(function()
+    if Settings.Noclip and p.Character then
+        for _, v in pairs(p.Character:GetDescendants()) do
+            if v:IsA("BasePart") and v.CanCollide then v.CanCollide = false end
+        end
+    end
+end)
+
+local flyBV, flyBG
+local function stopFly() if flyBV then flyBV:Destroy(); flyBV = nil end; if flyBG then flyBG:Destroy(); flyBG = nil end end
+RunService.RenderStepped:Connect(function()
+    if Settings.Fly and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+        local root = p.Character.HumanoidRootPart
+        if not flyBV then
+            flyBV = Instance.new("BodyVelocity", root); flyBV.MaxForce = Vector3.new(1e5, 1e5, 1e5); flyBV.Velocity = Vector3.zero
+            flyBG = Instance.new("BodyGyro", root); flyBG.MaxTorque = Vector3.new(1e5, 1e5, 1e5); flyBG.P = 1000
+        end
+        local cam = workspace.CurrentCamera; local moveDir = Vector3.zero
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir += cam.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir -= cam.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir -= cam.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir += cam.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir += Vector3.new(0, 1, 0) end
+        flyBV.Velocity = moveDir * Settings.FlySpeed; flyBG.CFrame = cam.CFrame
+    else stopFly() end
+end)
+
+UserInputService.JumpRequest:Connect(function()
+    if Settings.InfJump and p.Character then
+        local hum = p.Character:FindFirstChildOfClass("Humanoid")
+        if hum then hum:ChangeState("Jumping") end
+    end
+end)
+
+-- ============================ БАЗОВЫЕ ФУНКЦИИ ============================
+local function getRoot() local char = p.Character; return char and char:FindFirstChild("HumanoidRootPart") end
 local triggers, visited, order = {}, {}, 0
 local startPos, lastPos, currentProgress = nil, nil, 0
 
-local function isTrigger(o)
-    return o:IsA("BasePart") and o.Name == "Trigger" and o.Transparency >= 0.5
-end
+local function isTrigger(o) return o:IsA("BasePart") and o.Name == "Trigger" and o.Transparency >= 0.5 end
+local function addTrigger(o) order += 1; table.insert(triggers, {part=o, order=order}) end
 
-local function addTrigger(o)
-    order += 1
-    table.insert(triggers, {part=o, order=order})
-end
+for _, o in ipairs(workspace:GetDescendants()) do if isTrigger(o) then addTrigger(o) end end
+workspace.DescendantAdded:Connect(function(o) if isTrigger(o) then addTrigger(o) end end)
 
-for _, o in ipairs(workspace:GetDescendants()) do
-    if isTrigger(o) then addTrigger(o) end
-end
-
-workspace.DescendantAdded:Connect(function(o)
-    if isTrigger(o) then addTrigger(o) end
-end)
-
--- Кэшируем опасные зоны, чтобы не лагало
 local dangerousParts = {}
 task.spawn(function()
     while true do
@@ -69,88 +370,71 @@ task.spawn(function()
                 table.insert(newDangerous, v)
             end
         end
-        dangerousParts = newDangerous
-        task.wait(10)
+        dangerousParts = newDangerous; task.wait(10)
     end
 end)
 
 local function isDangerous(pos)
     if not Settings.SkipLadder then return false end
-    for _, v in ipairs(dangerousParts) do
-        if (v.Position - pos).Magnitude < 10 then return true end
-    end
+    for _, v in ipairs(dangerousParts) do if (v.Position - pos).Magnitude < 10 then return true end end
     return false
 end
 
 local function pickTarget(hPos)
-    local best, bestScore = nil, math.huge
-    local dir = Vector3.zero
-    if startPos then
-        dir = (hPos - startPos)
-        if dir.Magnitude < 0.1 then dir = Vector3.new(1,0,0) end
-        dir = dir.Unit
-    end
-
+    local best, bestScore = nil, math.huge; local dir = Vector3.zero
+    if startPos then dir = (hPos - startPos); if dir.Magnitude < 0.1 then dir = Vector3.new(1,0,0) end; dir = dir.Unit end
     for _, t in ipairs(triggers) do
         local o = t.part
         if o and o.Parent and not visited[o] then
             local po = o.Position
-            if isDangerous(po) then
-                visited[o] = true
-                continue
-            end
+            if isDangerous(po) then visited[o] = true; continue end
             if Settings.Mode == "Newest" then
-                local score = -t.order
-                if score < bestScore then bestScore, best = score, o end
+                local score = -t.order; if score < bestScore then bestScore, best = score, o end
             elseif Settings.Mode == "Progress" then
                 local fromStart = (po - startPos).Magnitude
                 if fromStart > currentProgress + 2 then
-                    local d = (po - hPos).Magnitude
-                    local score = d - fromStart*0.5
+                    local d = (po - hPos).Magnitude; local score = d - fromStart*0.5
                     if score < bestScore then bestScore, best = score, o end
                 end
             elseif Settings.Mode == "Direction" then
-                local ddir = dir
-                if lastPos and (hPos-lastPos).Magnitude > 0.5 then ddir = (hPos-lastPos).Unit end
+                local ddir = dir; if lastPos and (hPos-lastPos).Magnitude > 0.5 then ddir = (hPos-lastPos).Unit end
                 local proj = (po - hPos):Dot(ddir)
-                if proj > 1 then
-                    local d = (po - hPos).Magnitude
-                    local score = d - proj*0.5
-                    if score < bestScore then bestScore, best = score, o end
-                end
-            else
-                local d = (po - hPos).Magnitude
-                if d < bestScore then bestScore, best = d, o end
-            end
+                if proj > 1 then local d = (po - hPos).Magnitude; local score = d - proj*0.5; if score < bestScore then bestScore, best = score, o end end
+            else local d = (po - hPos).Magnitude; if d < bestScore then bestScore, best = d, o end end
         end
     end
     return best
 end
 
 local function markPair(target)
-    visited[target] = true
-    local tp = target.Position
-    for _, t in ipairs(triggers) do
-        local o = t.part
-        if o and o.Parent and (o.Position - tp).Magnitude <= 10 then visited[o] = true end
-    end
+    visited[target] = true; local tp = target.Position
+    for _, t in ipairs(triggers) do local o = t.part; if o and o.Parent and (o.Position - tp).Magnitude <= 10 then visited[o] = true end end
 end
+
+-- ============================ АНТИ-ЛОВУШКИ ============================
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        if Settings.AntiTrap then
+            for _, v in ipairs(workspace:GetDescendants()) do
+                if v:IsA("BasePart") then
+                    local name = v.Name:lower()
+                    if name:find("banana") or name:find("trap") or name:find("landmine") then
+                        pcall(function() v.CanTouch = false; v.CanCollide = false; v.Transparency = 1 end)
+                    end
+                end
+            end
+        end
+    end
+end)
 
 -- ============================ УПРАВЛЕНИЕ ПОТОКАМИ ============================
 local farmThread, antiRushThread, autoArthurThread = nil, nil, nil
 local isSyncing = false
 
-local function stopFarm()
-    Settings.AutoFarm = false
-    if farmThread then 
-        pcall(function() task.cancel(farmThread) end)
-        farmThread = nil 
-    end
-end
-
+local function stopFarm() Settings.AutoFarm = false; if farmThread then pcall(function() task.cancel(farmThread) end); farmThread = nil end end
 local function startFarm()
-    stopFarm()
-    Settings.AutoFarm = true
+    stopFarm(); Settings.AutoFarm = true
     farmThread = task.spawn(function()
         while Settings.AutoFarm do
             task.wait(Settings.Delay)
@@ -160,45 +444,32 @@ local function startFarm()
                 if not startPos then startPos, lastPos, currentProgress = hPos, hPos, 0 end
                 local target = pickTarget(hPos)
                 if target then
-                    markPair(target)
-                    -- Телепорт ровно на триггер
-                    h.CFrame = CFrame.new(target.Position + Vector3.new(0, 3, 0))
-                    lastPos = target.Position
-                    local dist = (target.Position - startPos).Magnitude
+                    markPair(target); h.CFrame = CFrame.new(target.Position + Vector3.new(0, 3, 0))
+                    lastPos = target.Position; local dist = (target.Position - startPos).Magnitude
                     if dist > currentProgress then currentProgress = dist end
-                else
-                    lastPos = hPos
-                end
+                else lastPos = hPos end
             end
         end
     end)
 end
 
-local function stopAntiRush()
-    Settings.AntiRush = false
-    if antiRushThread then pcall(function() task.cancel(antiRushThread) end); antiRushThread = nil end
-end
-
+local function stopAntiRush() Settings.AntiRush = false; if antiRushThread then pcall(function() task.cancel(antiRushThread) end); antiRushThread = nil end end
 local function startAntiRush()
-    stopAntiRush()
-    Settings.AntiRush = true
+    stopAntiRush(); Settings.AntiRush = true
     antiRushThread = task.spawn(function()
         while Settings.AntiRush do
             task.wait(0.5)
             local function isRushActive()
                 for _, other in ipairs(Players:GetPlayers()) do
                     if other ~= p and other.Character then
-                        local hr = other.Character:FindFirstChild("HumanoidRootPart")
-                        local hum = other.Character:FindFirstChild("Humanoid")
+                        local hr = other.Character:FindFirstChild("HumanoidRootPart"); local hum = other.Character:FindFirstChild("Humanoid")
                         if hr and hum and hum.MoveDirection.Magnitude > 0 and hr.Velocity.Magnitude > 50 then return true end
                     end
                 end
                 return false
             end
-
             if isRushActive() then
-                local myPos = getRoot() and getRoot().Position
-                local closest, bestD = nil, math.huge
+                local myPos = getRoot() and getRoot().Position; local closest, bestD = nil, math.huge
                 if myPos then
                     for _, v in ipairs(workspace:GetDescendants()) do
                         if v:IsA("BasePart") and (v.Name:lower():find("closet") or v.Name:lower():find("шкаф") or v.Name:lower():find("shield")) then
@@ -207,49 +478,31 @@ local function startAntiRush()
                         end
                     end
                 end
-                if closest then
-                    local root = getRoot()
-                    if root then root.CFrame = CFrame.new(closest.Position + Vector3.new(0, 3, 0)) end
-                    task.wait(1)
-                end
+                if closest then local root = getRoot(); if root then root.CFrame = CFrame.new(closest.Position + Vector3.new(0, 3, 0)) end; task.wait(1) end
             end
         end
     end)
 end
 
-local function stopAutoArthur()
-    Settings.AutoArthur = false
-    if autoArthurThread then pcall(function() task.cancel(autoArthurThread) end); autoArthurThread = nil end
-end
-
+local function stopAutoArthur() Settings.AutoArthur = false; if autoArthurThread then pcall(function() task.cancel(autoArthurThread) end); autoArthurThread = nil end end
 local function startAutoArthur()
-    stopAutoArthur()
-    Settings.AutoArthur = true
+    stopAutoArthur(); Settings.AutoArthur = true
     autoArthurThread = task.spawn(function()
         while Settings.AutoArthur do
             task.wait(5)
-            local arthur = nil
-            local names = {"arthur", "артур", "npcharacter", "npc"}
+            local arthur = nil; local names = {"arthur", "артур", "npcharacter", "npc"}
             for _, v in ipairs(workspace:GetDescendants()) do
                 if v:IsA("Model") and v:FindFirstChild("Humanoid") then
                     local name = v.Name:lower()
-                    for _, n in ipairs(names) do
-                        if name:find(n) and not Players:GetPlayerFromCharacter(v) then arthur = v break end
-                    end
+                    for _, n in ipairs(names) do if name:find(n) and not Players:GetPlayerFromCharacter(v) then arthur = v break end end
                 end
                 if arthur then break end
             end
-
             if arthur then
                 local hr = arthur:FindFirstChild("HumanoidRootPart") or arthur:FindFirstChild("Torso") or arthur:FindFirstChild("UpperTorso")
                 if hr then
                     local myRoot = getRoot()
-                    if myRoot then
-                        local myPos = myRoot.Position
-                        myRoot.CFrame = CFrame.new(hr.Position + Vector3.new(0, 3, 0))
-                        task.wait(1)
-                        myRoot.CFrame = CFrame.new(myPos)
-                    end
+                    if myRoot then local myPos = myRoot.Position; myRoot.CFrame = CFrame.new(hr.Position + Vector3.new(0, 3, 0)); task.wait(1); myRoot.CFrame = CFrame.new(myPos) end
                 end
             end
         end
@@ -258,6 +511,9 @@ end
 
 p.CharacterAdded:Connect(function()
     startPos, lastPos, currentProgress, visited = nil, nil, 0, {}
+    if Settings.Fly then stopFly() end
+    task.wait(1)
+    updateNametag()
 end)
 
 -- ============================ ESP СИСТЕМА ============================
@@ -265,53 +521,25 @@ local espObjects = {}
 local lastEspUpdate = 0
 
 local function clearESP()
-    for _, obj in ipairs(espObjects) do
-        if obj.highlight then obj.highlight:Destroy() end
-        if obj.frame then obj.frame:Destroy() end
-    end
+    for _, obj in ipairs(espObjects) do if obj.highlight then obj.highlight:Destroy() end; if obj.frame then obj.frame:Destroy() end end
     espObjects = {}
 end
 
 local function updateESP()
     if tick() - lastEspUpdate < 1 then return end
-    lastEspUpdate = tick()
-    clearESP()
+    lastEspUpdate = tick(); clearESP()
 
-    local myChar = p.Character
-    if not myChar then return end
-    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
-    if not myRoot then return end
+    local myChar = p.Character; if not myChar then return end
+    local myRoot = myChar:FindFirstChild("HumanoidRootPart"); if not myRoot then return end
 
-    if Settings.ESPPlayers or Settings.ESPManiac then
+    if Settings.ESPPlayers then
         for _, other in ipairs(Players:GetPlayers()) do
             if other ~= p and other.Character then
                 local hr = other.Character:FindFirstChild("HumanoidRootPart")
                 if hr then
-                    local color = Color3.fromRGB(255, 0, 0)
-                    if Settings.ESPManiac and (Settings.SelectedManiac == other or (Settings.ManiacName and other.Name:lower():find(Settings.ManiacName:lower()))) then
-                        color = Color3.fromRGB(255, 0, 255)
-                    end
-                    local h = Instance.new("Highlight")
-                    h.FillColor = color
-                    h.FillTransparency = 0.5
-                    h.OutlineColor = color
-                    h.OutlineTransparency = 0
-                    h.Parent = other.Character
-                    table.insert(espObjects, {highlight = h, part = hr, type = "player"})
-
-                    local bill = Instance.new("BillboardGui")
-                    bill.Size = UDim2.new(0, 80, 0, 20)
-                    bill.Adornee = hr
-                    bill.AlwaysOnTop = true
-                    local label = Instance.new("TextLabel", bill)
-                    label.Size = UDim2.new(1,0,1,0)
-                    label.BackgroundTransparency = 1
-                    label.TextColor3 = color
-                    label.Font = Enum.Font.GothamBold
-                    label.TextSize = 14
-                    label.Text = string.format("%.0f m", (hr.Position - myRoot.Position).Magnitude)
-                    bill.Parent = other.Character
-                    table.insert(espObjects, {highlight = nil, frame = bill, part = hr, type = "player"})
+                    local h = Instance.new("Highlight", other.Character)
+                    h.FillColor = Color3.fromRGB(255, 0, 0); h.FillTransparency = 0.5; h.OutlineColor = Color3.fromRGB(255, 0, 0)
+                    table.insert(espObjects, {highlight = h, part = hr})
                 end
             end
         end
@@ -319,55 +547,64 @@ local function updateESP()
 
     if Settings.ESPMonsters then
         local playerCharacters = {}
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if plr.Character then playerCharacters[plr.Character] = true end
-        end
+        for _, plr in ipairs(Players:GetPlayers()) do if plr.Character then playerCharacters[plr.Character] = true end end
         for _, v in ipairs(workspace:GetDescendants()) do
             if v:IsA("Model") and not playerCharacters[v] and v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") then
-                local hr = v:FindFirstChild("HumanoidRootPart")
-                if hr then
-                    local h = Instance.new("Highlight")
-                    h.FillColor = Color3.fromRGB(255, 255, 0)
-                    h.FillTransparency = 0.5
-                    h.OutlineColor = Color3.fromRGB(255, 255, 0)
-                    h.OutlineTransparency = 0
-                    h.Parent = v
-                    table.insert(espObjects, {highlight = h, part = hr, type = "monster"})
+                local h = Instance.new("Highlight", v)
+                h.FillColor = Color3.fromRGB(255, 255, 0); h.FillTransparency = 0.5; h.OutlineColor = Color3.fromRGB(255, 255, 0)
+                table.insert(espObjects, {highlight = h, part = v.HumanoidRootPart})
+            end
+        end
+    end
+
+    if Settings.ESPItems then
+        for _, v in ipairs(workspace:GetDescendants()) do
+            if v:IsA("Model") or v:IsA("Tool") or v:IsA("BasePart") then
+                local n = v.Name:lower()
+                if n:find("key") or n:find("med") or n:find("battery") or n:find("exit") or n:find("item") or n:find("tool") or n:find("ключ") or n:find("аптеч") or n:find("выход") then
+                    if not v:FindFirstChildOfClass("Highlight") then
+                        local h = Instance.new("Highlight", v)
+                        h.FillColor = Color3.fromRGB(0, 255, 255); h.OutlineColor = Color3.fromRGB(255, 255, 255)
+                        table.insert(espObjects, {highlight = h, part = v})
+                    end
+                end
+            end
+        end
+    end
+
+    if Settings.ESPHideouts then
+        for _, v in ipairs(workspace:GetDescendants()) do
+            if v:IsA("Model") or v:IsA("BasePart") then
+                local n = v.Name:lower()
+                if n:find("closet") or n:find("locker") or n:find("hide") or n:find("cabinet") or n:find("wardrobe") or n:find("шкаф") or n:find("укрыт") then
+                    if not v:FindFirstChildOfClass("Highlight") then
+                        local h = Instance.new("Highlight", v)
+                        h.FillColor = Color3.fromRGB(0, 255, 0); h.OutlineColor = Color3.fromRGB(255, 255, 255)
+                        table.insert(espObjects, {highlight = h, part = v})
+                    end
                 end
             end
         end
     end
 end
 
--- ============================ FULLBRIGHT ============================
-local lighting = game:GetService("Lighting")
+-- ============================ FULLBRIGHT И СКОРОСТЬ ============================
 local oldBrightness, oldAmbient, oldOutdoorAmbient, oldClockTime
 local function applyFullBright()
     if Settings.FullBright then
-        oldBrightness = oldBrightness or lighting.Brightness
-        oldAmbient = oldAmbient or lighting.Ambient
-        oldOutdoorAmbient = oldOutdoorAmbient or lighting.OutdoorAmbient
-        oldClockTime = oldClockTime or lighting.ClockTime
-        lighting.Brightness = 1
-        lighting.Ambient = Color3.new(1,1,1)
-        lighting.OutdoorAmbient = Color3.new(1,1,1)
-        lighting.ClockTime = 14
+        oldBrightness = oldBrightness or Lighting.Brightness; oldAmbient = oldAmbient or Lighting.Ambient
+        oldOutdoorAmbient = oldOutdoorAmbient or Lighting.OutdoorAmbient; oldClockTime = oldClockTime or Lighting.ClockTime
+        Lighting.Brightness = 1; Lighting.Ambient = Color3.new(1,1,1); Lighting.OutdoorAmbient = Color3.new(1,1,1); Lighting.ClockTime = 14
     else
         if oldBrightness then
-            lighting.Brightness = oldBrightness
-            lighting.Ambient = oldAmbient
-            lighting.OutdoorAmbient = oldOutdoorAmbient
-            lighting.ClockTime = oldClockTime
+            Lighting.Brightness = oldBrightness; Lighting.Ambient = oldAmbient
+            Lighting.OutdoorAmbient = oldOutdoorAmbient; Lighting.ClockTime = oldClockTime
         end
     end
 end
 
 RunService.RenderStepped:Connect(function()
     if Settings.FullBright then applyFullBright() end
-end)
-
--- ============================ WALKSPEED ============================
-RunService.RenderStepped:Connect(function()
     if p.Character then
         local hum = p.Character:FindFirstChild("Humanoid")
         if hum and hum.WalkSpeed ~= Settings.WalkSpeed then hum.WalkSpeed = Settings.WalkSpeed end
@@ -375,197 +612,146 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ============================ RAYFIELD UI ============================
-local TabSurvivor = Window:CreateTab("Выживший", 4483362458)
+local TabNormal = Window:CreateTab("Обычный", 4483362458)
 local TabManiac = Window:CreateTab("Маньяк", 4483362458)
+local TabMove = Window:CreateTab("Движение", 4483362458)
+local TabVis = Window:CreateTab("Визуал", 4483362458)
+local TabOpt = Window:CreateTab("Оптимизация", 4483362458)
+local TabUtil = Window:CreateTab("Утилиты", 4483362458)
+local TabFun = Window:CreateTab("Развлечения", 4483362458)
 
 local FarmToggle, FarmToggle2
 
--- ВКЛАДКА ВЫЖИВШИЙ
-TabSurvivor:CreateSection("Автофарм")
-FarmToggle = TabSurvivor:CreateToggle({
-    Name = "Автофарм (Выживший)",
-    CurrentValue = false,
-    Flag = "farm",
-    Callback = function(v)
+-- ОБЫЧНЫЙ
+TabNormal:CreateSection("Автофарм")
+FarmToggle = TabNormal:CreateToggle({ 
+    Name = "Автофарм (Обычный)", 
+    CurrentValue = false, 
+    Flag = "farm", 
+    Callback = function(v) 
         if isSyncing then return end
         isSyncing = true
         pcall(function()
-            if v then
+            if v then 
                 if FarmToggle2 then FarmToggle2:Set(false) end
-                startFarm()
-            else
-                stopFarm()
+                startFarm() 
+            else 
+                stopFarm() 
             end
         end)
         isSyncing = false
-    end
+    end 
 })
+TabNormal:CreateDropdown({ Name = "Режим выбора", Options = {"Newest", "Progress", "Direction", "Nearest"}, CurrentOption = "Newest", Flag = "mode", Callback = function(opt) Settings.Mode = opt end })
+TabNormal:CreateSlider({ Name = "Задержка (сек)", Range = {0.05, 1}, Increment = 0.01, Suffix = "сек", CurrentValue = 0.3, Flag = "delay", Callback = function(v) Settings.Delay = v end })
+TabNormal:CreateToggle({ Name = "Пропускать лестницу/бананы", CurrentValue = true, Flag = "skip_ladder", Callback = function(v) Settings.SkipLadder = v end })
 
-TabSurvivor:CreateDropdown({
-    Name = "Режим выбора",
-    Options = {"Newest", "Progress", "Direction", "Nearest"},
-    CurrentOption = "Newest",
-    Flag = "mode",
-    Callback = function(opt) Settings.Mode = opt end
-})
+TabNormal:CreateSection("Защита")
+TabNormal:CreateToggle({ Name = "Анти раш (в шкаф)", CurrentValue = false, Flag = "antirush", Callback = function(v) if v then startAntiRush() else stopAntiRush() end end })
+TabNormal:CreateToggle({ Name = "Auto-Hide (Прятки при опасности)", CurrentValue = false, Flag = "autohide", Callback = function(v) if v then startAutoHide() else stopAutoHide() end end })
+TabNormal:CreateToggle({ Name = "Авто привет Артуру", CurrentValue = false, Flag = "autoarthur", Callback = function(v) if v then startAutoArthur() else stopAutoArthur() end end })
+TabNormal:CreateButton({ Name = "Сбросить прогресс фарма", Callback = function() visited = {}; startPos, lastPos, currentProgress = nil, nil, 0 end })
 
-TabSurvivor:CreateSlider({
-    Name = "Задержка (сек)",
-    Range = {0.05, 1},
-    Increment = 0.01,
-    Suffix = "сек",
-    CurrentValue = 0.3,
-    Flag = "delay",
-    Callback = function(v) Settings.Delay = v end
-})
-
-TabSurvivor:CreateToggle({
-    Name = "Пропускать лестницу/бананы",
-    CurrentValue = true,
-    Flag = "skip_ladder",
-    Callback = function(v) Settings.SkipLadder = v end
-})
-
-TabSurvivor:CreateSection("Защита")
-TabSurvivor:CreateToggle({
-    Name = "Анти раш (в шкаф)",
-    CurrentValue = false,
-    Flag = "antirush",
-    Callback = function(v) if v then startAntiRush() else stopAntiRush() end end
-})
-
-TabSurvivor:CreateToggle({
-    Name = "Авто привет Артуру",
-    CurrentValue = false,
-    Flag = "autoarthur",
-    Callback = function(v) if v then startAutoArthur() else stopAutoArthur() end end
-})
-
-TabSurvivor:CreateSection("ESP")
-TabSurvivor:CreateToggle({
-    Name = "ESP игроков",
-    CurrentValue = false,
-    Flag = "esp_players",
-    Callback = function(v) Settings.ESPPlayers = v end
-})
-
-TabSurvivor:CreateToggle({
-    Name = "ESP монстров",
-    CurrentValue = false,
-    Flag = "esp_monsters",
-    Callback = function(v) Settings.ESPMonsters = v end
-})
-
-TabSurvivor:CreateToggle({
-    Name = "FullBright",
-    CurrentValue = false,
-    Flag = "fullbright",
-    Callback = function(v) Settings.FullBright = v; applyFullBright() end
-})
-
-TabSurvivor:CreateSection("Скорость")
-TabSurvivor:CreateSlider({
-    Name = "WalkSpeed",
-    Range = {0, 200},
-    Increment = 1,
-    Suffix = "",
-    CurrentValue = 16,
-    Flag = "walkspeed",
-    Callback = function(v) Settings.WalkSpeed = v end
-})
-
-TabSurvivor:CreateButton({
-    Name = "Сбросить прогресс фарма",
-    Callback = function()
-        visited = {}
-        startPos, lastPos, currentProgress = nil, nil, 0
-    end
-})
-
--- ВКЛАДКА МАНЬЯК
+-- МАНЬЯК
 TabManiac:CreateSection("Автофарм")
-FarmToggle2 = TabManiac:CreateToggle({
-    Name = "Автофарм (Маньяк)",
-    CurrentValue = false,
-    Flag = "farm_maniac",
-    Callback = function(v)
+FarmToggle2 = TabManiac:CreateToggle({ 
+    Name = "Автофарм (Маньяк)", 
+    CurrentValue = false, 
+    Flag = "farm_maniac", 
+    Callback = function(v) 
         if isSyncing then return end
         isSyncing = true
         pcall(function()
-            if v then
+            if v then 
                 if FarmToggle then FarmToggle:Set(false) end
-                startFarm()
-            else
-                stopFarm()
+                startFarm() 
+            else 
+                stopFarm() 
             end
         end)
         isSyncing = false
-    end
+    end 
 })
+TabManiac:CreateDropdown({ Name = "Режим выбора", Options = {"Newest", "Progress", "Direction", "Nearest"}, CurrentOption = "Newest", Flag = "mode_maniac", Callback = function(opt) Settings.Mode = opt end })
+TabManiac:CreateSlider({ Name = "Задержка (сек)", Range = {0.05, 1}, Increment = 0.01, Suffix = "сек", CurrentValue = 0.3, Flag = "delay_maniac", Callback = function(v) Settings.Delay = v end })
+TabManiac:CreateSection("Помощник")
+TabManiac:CreateToggle({ Name = "Умный Авто IQ-тест", CurrentValue = false, Flag = "auto_iq", Callback = function(v) if v then startAutoIQ() else stopAutoIQ() end end })
 
-TabManiac:CreateDropdown({
-    Name = "Режим выбора",
-    Options = {"Newest", "Progress", "Direction", "Nearest"},
-    CurrentOption = "Newest",
-    Flag = "mode_maniac",
-    Callback = function(opt) Settings.Mode = opt end
-})
+-- ДВИЖЕНИЕ
+TabMove:CreateSection("Основное")
+TabMove:CreateToggle({ Name = "Noclip (Сквозь стены)", CurrentValue = false, Flag = "noclip", Callback = function(v) Settings.Noclip = v end })
+TabMove:CreateToggle({ Name = "Infinite Jump", CurrentValue = false, Flag = "inf_jump", Callback = function(v) Settings.InfJump = v end })
+TabMove:CreateSection("Fly")
+TabMove:CreateToggle({ Name = "Fly (Полет)", CurrentValue = false, Flag = "fly", Callback = function(v) Settings.Fly = v; if not v then stopFly() end end })
+TabMove:CreateSlider({ Name = "Скорость полета", Range = {10, 200}, Increment = 5, Suffix = " studs/s", CurrentValue = 50, Flag = "fly_speed", Callback = function(v) Settings.FlySpeed = v end })
+TabMove:CreateSection("Скорость")
+TabMove:CreateSlider({ Name = "WalkSpeed", Range = {0, 200}, Increment = 1, Suffix = "", CurrentValue = 16, Flag = "walkspeed", Callback = function(v) Settings.WalkSpeed = v end })
 
-TabManiac:CreateSlider({
-    Name = "Задержка (сек)",
-    Range = {0.05, 1},
-    Increment = 0.01,
-    Suffix = "сек",
-    CurrentValue = 0.3,
-    Flag = "delay_maniac",
-    Callback = function(v) Settings.Delay = v end
-})
+-- ВИЗУАЛ
+TabVis:CreateSection("ESP")
+TabVis:CreateToggle({ Name = "ESP игроков", CurrentValue = false, Flag = "esp_players", Callback = function(v) Settings.ESPPlayers = v end })
+TabVis:CreateToggle({ Name = "ESP монстров", CurrentValue = false, Flag = "esp_monsters", Callback = function(v) Settings.ESPMonsters = v end })
+TabVis:CreateToggle({ Name = "ESP предметов (Лут/Ключи)", CurrentValue = false, Flag = "esp_items", Callback = function(v) Settings.ESPItems = v end })
+TabVis:CreateToggle({ Name = "ESP укрытий (Шкафы)", CurrentValue = false, Flag = "esp_hideouts", Callback = function(v) Settings.ESPHideouts = v end })
+TabVis:CreateSection("Освещение")
+TabVis:CreateToggle({ Name = "FullBright", CurrentValue = false, Flag = "fullbright", Callback = function(v) Settings.FullBright = v; applyFullBright() end })
 
-TabManiac:CreateSection("ESP маньяка")
-TabManiac:CreateToggle({
-    Name = "ESP маньяка (улучш.)",
-    CurrentValue = false,
-    Flag = "esp_maniac",
-    Callback = function(v)
-        Settings.ESPManiac = v
-        Settings.ESPPlayers = v
-    end
-})
+-- ОПТИМИЗАЦИЯ
+TabOpt:CreateSection("Производительность")
+TabOpt:CreateToggle({ Name = "FPS Boost (Убрать тени/частицы)", CurrentValue = false, Flag = "fps_boost", Callback = function(v) Settings.FPSBoost = v; applyFPSBoost(v) end })
+TabOpt:CreateToggle({ Name = "Улучшение графики (Bloom/Цвета)", CurrentValue = false, Flag = "high_gfx", Callback = function(v) Settings.HighGraphics = v; applyHighGraphics(v) end })
+TabOpt:CreateSection("Информация")
+TabOpt:CreateToggle({ Name = "Показать FPS и Пинг", CurrentValue = false, Flag = "show_stats", Callback = function(v) Settings.ShowStats = v; statsFrame.Visible = v end })
 
-TabManiac:CreateInput({
-    Name = "Имя маньяка (по желанию)",
-    PlaceholderText = "Например: Maniac",
-    RemoveTextAfterFocusLost = false,
-    Callback = function(text) Settings.ManiacName = text end
-})
-
-TabManiac:CreateButton({
-    Name = "Выбрать маньяка (кто под курсором)",
-    Callback = function()
-        local mouse = p:GetMouse()
-        local target = mouse.Target
-        if target then
-            local model = target:FindFirstAncestorOfClass("Model")
-            if model and model:IsA("Model") and model ~= p.Character then
-                Settings.SelectedManiac = Players:GetPlayerFromCharacter(model)
-                if Settings.SelectedManiac then
-                    Rayfield:Notify("Маньяк выбран: "..Settings.SelectedManiac.Name)
-                else
-                    Rayfield:Notify("Это не игрок")
-                end
+-- УТИЛИТЫ (Исправленная ошибка синтаксиса)
+TabUtil:CreateSection("Безопасность")
+TabUtil:CreateToggle({ Name = "Anti-Trap (Удаление ловушек)", CurrentValue = false, Flag = "anti_trap", Callback = function(v) Settings.AntiTrap = v end })
+TabUtil:CreateSection("Интеграции")
+TabUtil:CreateToggle({ 
+    Name = "Discord RPC (Статус)", 
+    CurrentValue = false, 
+    Flag = "discord_rpc", 
+    Callback = function(v) 
+        Settings.DiscordRPC = v
+        if v then
+            if setrichpresence then
+                pcall(function()
+                    setthreadidentity(7)
+                    setrichpresence("Играет в Murino Horror", "Фармит с SWILL Cheat", "swill_icon")
+                end)
+                Rayfield:Notify({Title = "Discord RPC", Content = "Статус установлен!", Duration = 3})
+            else
+                Rayfield:Notify({Title = "Ошибка", Content = "Solara не поддерживает RPC", Duration = 5})
+            end
+        else
+            if clearrichpresence then
+                pcall(function()
+                    setthreadidentity(7)
+                    clearrichpresence()
+                end)
             end
         end
-    end
+    end 
 })
 
+-- РАЗВЛЕЧЕНИЯ
+TabFun:CreateSection("Свой Ник")
+TabFun:CreateToggle({ Name = "Ник 'SWILL SCRIPT' над головой", CurrentValue = false, Flag = "nametag", Callback = function(v) Settings.Nametag = v; updateNametag() end })
+
+TabFun:CreateSection("Саундборд")
+local soundIdInput = TabFun:CreateInput({ Name = "ID Звука", PlaceholderText = "Введи ID сюда...", RemoveTextAfterFocusLost = false })
+TabFun:CreateButton({ Name = "Проиграть (Локально)", Callback = function() if soundIdInput.Value ~= "" then playSound(soundIdInput.Value, false) end end })
+TabFun:CreateButton({ Name = "Проиграть (Всем)", Callback = function() if soundIdInput.Value ~= "" then playSound(soundIdInput.Value, true) end end })
+TabFun:CreateButton({ Name = "🔊 Bass Meme", Callback = function() playSound("5153934612", true) end })
+TabFun:CreateButton({ Name = "🔊 Vine Boom", Callback = function() playSound("5153476613", true) end })
+TabFun:CreateButton({ Name = "🔊 Bruh", Callback = function() playSound("5153290981", true) end })
+
 -- УВЕДОМЛЕНИЕ
-Rayfield:Notify("Скрипт загружен! Оптимизация выполнена.")
+Rayfield:Notify("Скрипт загружен! Умный IQ-тест активен.")
 
 task.spawn(function()
     while true do
         task.wait(1)
-        if Settings.ESPPlayers or Settings.ESPMonsters or Settings.ESPManiac then
-            updateESP()
-        end
+        if Settings.ESPPlayers or Settings.ESPMonsters or Settings.ESPItems or Settings.ESPHideouts then updateESP() end
     end
 end)
