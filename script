@@ -1,5 +1,5 @@
 -- Murino Horror | Ultra UI (Rayfield) | Solara/Xeno
--- Вставь и запусти.
+-- Обновление: FullBright + исправленный ESP монстров
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
@@ -27,6 +27,7 @@ local Settings = {
     AntiRush = false,
     AutoArthur = false,
     WalkSpeed = 16,
+    FullBright = false,
     ManiacName = nil,
     SelectedManiac = nil
 }
@@ -142,7 +143,8 @@ p.CharacterAdded:Connect(function()
 end)
 
 -- ============================ ESP СИСТЕМА ============================
-local espObjects = {} -- {highlight, part, type}
+local espObjects = {} -- {highlight, part, type, model}
+local lastEspUpdate = 0
 
 local function clearESP()
     for _, obj in ipairs(espObjects) do
@@ -153,21 +155,25 @@ local function clearESP()
 end
 
 local function updateESP()
+    -- Обновляем не чаще 1 раза в секунду, чтобы не лагать
+    if tick() - lastEspUpdate < 1 then return end
+    lastEspUpdate = tick()
     clearESP()
+
     local myChar = p.Character
     if not myChar then return end
     local myRoot = myChar:FindFirstChild("HumanoidRootPart")
     if not myRoot then return end
 
-    -- ESP игроков
+    -- ESP игроков и маньяка
     if Settings.ESPPlayers or Settings.ESPManiac then
         for _, other in ipairs(Players:GetPlayers()) do
             if other ~= p and other.Character then
                 local hr = other.Character:FindFirstChild("HumanoidRootPart")
                 if hr then
-                    local color = Color3.fromRGB(255, 0, 0) -- красный для всех
+                    local color = Color3.fromRGB(255, 0, 0) -- красный
                     if Settings.ESPManiac and (Settings.SelectedManiac == other or (Settings.ManiacName and other.Name:lower():find(Settings.ManiacName:lower()))) then
-                        color = Color3.fromRGB(255, 0, 255) -- пурпурный для маньяка
+                        color = Color3.fromRGB(255, 0, 255) -- пурпурный
                     end
                     local h = Instance.new("Highlight")
                     h.FillColor = color
@@ -177,7 +183,6 @@ local function updateESP()
                     h.Parent = other.Character
                     table.insert(espObjects, {highlight = h, part = hr, type = "player"})
 
-                    -- Метка с расстоянием
                     local bill = Instance.new("BillboardGui")
                     bill.Size = UDim2.new(0, 80, 0, 20)
                     bill.Adornee = hr
@@ -196,12 +201,16 @@ local function updateESP()
         end
     end
 
-    -- ESP монстров (поиск NPC)
+    -- ESP монстров (все модели с Humanoid, кроме игроков)
     if Settings.ESPMonsters then
+        local playerCharacters = {}
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr.Character then playerCharacters[plr.Character] = true end
+        end
         for _, v in ipairs(workspace:GetDescendants()) do
-            if v:IsA("Model") and v.Name:lower():find("monster") or v.Name:lower():find("zombie") or v.Name:lower():find("creature") then
-                local hr = v:FindFirstChild("HumanoidRootPart") or v:FindFirstChild("Torso") or v:FindFirstChild("UpperTorso")
-                if hr and hr.Parent then
+            if v:IsA("Model") and not playerCharacters[v] and v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") then
+                local hr = v:FindFirstChild("HumanoidRootPart")
+                if hr then
                     local h = Instance.new("Highlight")
                     h.FillColor = Color3.fromRGB(255, 255, 0) -- жёлтый
                     h.FillTransparency = 0.5
@@ -215,13 +224,40 @@ local function updateESP()
     end
 end
 
+-- ============================ FULLBRIGHT ============================
+local lighting = game:GetService("Lighting")
+local oldBrightness, oldAmbient, oldOutdoorAmbient, oldClockTime
+local function applyFullBright()
+    if Settings.FullBright then
+        oldBrightness = lighting.Brightness
+        oldAmbient = lighting.Ambient
+        oldOutdoorAmbient = lighting.OutdoorAmbient
+        oldClockTime = lighting.ClockTime
+        lighting.Brightness = 1
+        lighting.Ambient = Color3.new(1,1,1)
+        lighting.OutdoorAmbient = Color3.new(1,1,1)
+        lighting.ClockTime = 14
+    else
+        if oldBrightness then
+            lighting.Brightness = oldBrightness
+            lighting.Ambient = oldAmbient
+            lighting.OutdoorAmbient = oldOutdoorAmbient
+            lighting.ClockTime = oldClockTime
+        end
+    end
+end
+
+RunService.RenderStepped:Connect(function()
+    if Settings.FullBright then applyFullBright() end
+end)
+
 -- ============================ АНТИ РАШ ============================
 local function findClosestCloset()
     local myPos = getRoot() and getRoot().Position
     if not myPos then return nil end
     local closest, bestD = nil, math.huge
     for _, v in ipairs(workspace:GetDescendants()) do
-        if v:IsA("BasePart") and v.Name:lower():find("closet") or v.Name:lower():find("шкаф") or v.Name:lower():find("shield") then
+        if v:IsA("BasePart") and (v.Name:lower():find("closet") or v.Name:lower():find("шкаф") or v.Name:lower():find("shield")) then
             local dist = (v.Position - myPos).Magnitude
             if dist < bestD then
                 bestD = dist
@@ -233,7 +269,6 @@ local function findClosestCloset()
 end
 
 local function isRushActive()
-    -- если какой-то другой игрок движется со скоростью > 50
     for _, other in ipairs(Players:GetPlayers()) do
         if other ~= p and other.Character then
             local hr = other.Character:FindFirstChild("HumanoidRootPart")
@@ -255,7 +290,7 @@ local function antiRushLoop()
             local closet = findClosestCloset()
             if closet then
                 teleportTo(closet.Position + Vector3.new(0, 3, 0))
-                task.wait(1) -- подождать, пока раш пройдёт
+                task.wait(1)
             end
         end
     end
@@ -273,7 +308,7 @@ end
 
 local function autoArthurLoop()
     while Settings.AutoArthur do
-        task.wait(5) -- проверяем каждые 5 сек
+        task.wait(5)
         local arthur = findArthur()
         if arthur then
             local hr = arthur:FindFirstChild("HumanoidRootPart") or arthur:FindFirstChild("Torso") or arthur:FindFirstChild("UpperTorso")
@@ -297,15 +332,6 @@ RunService.RenderStepped:Connect(function()
         if hum and hum.WalkSpeed ~= Settings.WalkSpeed then
             hum.WalkSpeed = Settings.WalkSpeed
         end
-    end
-end)
-
--- ============================ ESP ОБНОВЛЕНИЕ ============================
-RunService.RenderStepped:Connect(function()
-    if Settings.ESPPlayers or Settings.ESPMonsters or Settings.ESPManiac then
-        updateESP()
-    else
-        clearESP()
     end
 end)
 
@@ -379,6 +405,16 @@ local ESPMonstersToggle = TabSurvivor:CreateToggle({
     Callback = function(v) Settings.ESPMonsters = v end
 })
 
+local FullBrightToggle = TabSurvivor:CreateToggle({
+    Name = "FullBright",
+    CurrentValue = false,
+    Flag = "fullbright",
+    Callback = function(v)
+        Settings.FullBright = v
+        applyFullBright()
+    end
+})
+
 local SurvivorSection4 = TabSurvivor:CreateSection("Скорость")
 local WalkSpeedSlider = TabSurvivor:CreateSlider({
     Name = "WalkSpeed",
@@ -435,7 +471,7 @@ local ESPManiacToggle = TabManiac:CreateToggle({
     Flag = "esp_maniac",
     Callback = function(v)
         Settings.ESPManiac = v
-        Settings.ESPPlayers = v -- если включен ESP маньяка, также включаем ESP игроков
+        Settings.ESPPlayers = v
     end
 })
 
@@ -467,5 +503,15 @@ local SelectManiacBtn = TabManiac:CreateButton({
     end
 })
 
--- ============================ УВЕДОМЛЕНИЕ О ЗАГРУЗКЕ ============================
-Rayfield:Notify("Скрипт загружен! Включи ESP и наслаждайся.")
+-- ============================ УВЕДОМЛЕНИЕ ============================
+Rayfield:Notify("Скрипт загружен! Включи FullBright и ESP монстров – всё работает.")
+
+-- Обновление ESP по таймеру
+task.spawn(function()
+    while true do
+        task.wait(1)
+        if Settings.ESPPlayers or Settings.ESPMonsters or Settings.ESPManiac then
+            updateESP()
+        end
+    end
+end)
