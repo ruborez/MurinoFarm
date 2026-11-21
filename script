@@ -1,5 +1,5 @@
 -- Murino Horror | Ultra UI (Rayfield) | Solara/Xeno
--- Исправлено: IQ-тест (4 ответа), HUD (Этаж/Комнаты), ESP по ProximityPrompt, Auto-Hide
+-- Исправлено: IQ-тест (игнорирует меню), защита звуков, HUD
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
@@ -82,15 +82,17 @@ end
 
 -- ============================ САУНДБОРД ============================
 local function playSound(id, isGlobal)
-    local sound = Instance.new("Sound")
-    sound.SoundId = "rbxassetid://" .. tostring(id)
-    sound.Volume = 3
-    if isGlobal then sound.Parent = workspace else sound.Parent = SoundService end
-    sound:Play()
-    Debris:AddItem(sound, sound.TimeLength + 1)
+    pcall(function()
+        local sound = Instance.new("Sound")
+        sound.SoundId = "rbxassetid://" .. tostring(id)
+        sound.Volume = 3
+        if isGlobal then sound.Parent = workspace else sound.Parent = SoundService end
+        sound:Play()
+        Debris:AddItem(sound, 5)
+    end)
 end
 
--- ============================ УМНЫЙ AUTO-IQ (4 ОТВЕТА) ============================
+-- ============================ УМНЫЙ AUTO-IQ (ИСПРАВЛЕН) ============================
 local autoIQThread = nil
 local lastSolvedEquation = ""
 
@@ -105,14 +107,26 @@ local function startAutoIQ()
             local equation = nil
             local activeGui = nil
             
-            -- Ищем текст с примером
+            -- Ищем текст с примером, ИГНОРИРУЯ Rayfield
             for _, gui in ipairs(guis) do
                 if gui then
                     for _, obj in ipairs(gui:GetDescendants()) do
                         if obj:IsA("TextLabel") and obj.Text ~= "" then
-                            local txt = obj.Text
-                            if txt:match("%d+") and (txt:lower():find("x") or txt:find("%*") or txt:find("%+") or txt:find("%-") or txt:find("х")) then
-                                if not txt:lower():find("сек") and not txt:lower():find("мин") then
+                            -- Проверка: не является ли это меню Rayfield
+                            local isRayfield = false
+                            local parent = obj
+                            while parent do
+                                if parent.Name == "Rayfield" or parent.Name:lower():find("rayfield") then
+                                    isRayfield = true
+                                    break
+                                end
+                                parent = parent.Parent
+                            end
+                            
+                            if not isRayfield then
+                                local txt = obj.Text
+                                -- Строгий поиск математики (число + знак + число)
+                                if txt:match("%d+%s*[%+%-%*xх/]%s*%d+") then
                                     equation = txt; activeGui = gui; break
                                 end
                             end
@@ -202,21 +216,13 @@ RunService.RenderStepped:Connect(function()
                 for _, obj in ipairs(gui:GetDescendants()) do
                     if obj:IsA("TextLabel") or obj:IsA("TextButton") then
                         local txt = obj.Text:lower()
-                        -- Ищем этаж
                         if (txt:find("этаж") or txt:find("floor")) and not foundFloor then
                             local num = txt:match("%d+")
-                            if num then 
-                                floorLabel.Text = "Этаж: " .. num
-                                foundFloor = true 
-                            end
+                            if num then floorLabel.Text = "Этаж: " .. num; foundFloor = true end
                         end
-                        -- Ищем комнату
                         if (txt:find("комнат") or txt:find("room")) and not foundRoom then
                             local num = txt:match("%d+")
-                            if num then 
-                                roomLabel.Text = "Комнат: " .. num
-                                foundRoom = true 
-                            end
+                            if num then roomLabel.Text = "Комнат: " .. num; foundRoom = true end
                         end
                     end
                 end
@@ -224,7 +230,7 @@ RunService.RenderStepped:Connect(function()
         end
     end)
     
-    -- 2. Резервный метод: поиск 3D-табличек в Workspace (например, Floor1, RoomMarker)
+    -- 2. Резервный метод: поиск 3D-табличек в Workspace
     if not foundFloor then
         pcall(function()
             local closestFloor, minDist = nil, math.huge
@@ -236,41 +242,27 @@ RunService.RenderStepped:Connect(function()
                         if num and myRoot then
                             local pos = v:IsA("Model") and (v.PrimaryPart and v.PrimaryPart.Position or v:GetPivot().Position) or v.Position
                             local d = (pos - myRoot.Position).Magnitude
-                            if d < minDist then
-                                minDist = d
-                                closestFloor = num
-                            end
+                            if d < minDist then minDist = d; closestFloor = num end
                         end
                     end
                 end
             end
-            if closestFloor then
-                floorLabel.Text = "Этаж: " .. closestFloor
-                foundFloor = true
-            end
+            if closestFloor then floorLabel.Text = "Этаж: " .. closestFloor; foundFloor = true end
         end)
     end
     
-    -- 3. Если ничего не нашли — показываем высоту по Y и кол-во пройденных комнат
+    -- 3. Если ничего не нашли — показываем высоту по Y
     if not foundFloor then
-        if myRoot then
-            floorLabel.Text = "Высота: " .. math.floor(myRoot.Position.Y) .. " studs"
-        else
-            floorLabel.Text = "Высота: ?"
-        end
+        if myRoot then floorLabel.Text = "Высота: " .. math.floor(myRoot.Position.Y) .. " studs" else floorLabel.Text = "Высота: ?" end
     end
     
     if not foundRoom then
-        -- Считаем пройденные триггеры (это и есть комнаты)
         local visitedCount = 0
         for _ in pairs(visited) do visitedCount = visitedCount + 1 end
-        if visitedCount > 0 then
-            roomLabel.Text = "Пройдено комнат: " .. visitedCount
-        else
-            roomLabel.Text = "Комнат: ?"
-        end
+        if visitedCount > 0 then roomLabel.Text = "Пройдено комнат: " .. visitedCount else roomLabel.Text = "Комнат: ?" end
     end
 end)
+
 -- ============================ СЧЕТЧИКИ FPS И ПИНГА ============================
 local statsGui = Instance.new("ScreenGui", CoreGui)
 statsGui.Name = "SWILL_Stats"
@@ -350,9 +342,7 @@ local function startAutoHide()
                 local isThreatClose = false
                 for _, plr in ipairs(Players:GetPlayers()) do
                     if plr ~= p and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                        if (plr.Character.HumanoidRootPart.Position - myRoot.Position).Magnitude < 60 then
-                            isThreatClose = true; break
-                        end
+                        if (plr.Character.HumanoidRootPart.Position - myRoot.Position).Magnitude < 60 then isThreatClose = true; break end
                     end
                 end
                 if isThreatClose then
@@ -379,13 +369,9 @@ local function startAutoArthur()
         while Settings.AutoArthur do
             task.wait(3)
             local arthur = nil
-            -- Ищем любого NPC, у которого есть Humanoid, и это не игрок
             for _, v in ipairs(workspace:GetDescendants()) do
                 if v:IsA("Model") and v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") then
-                    if not Players:GetPlayerFromCharacter(v) then
-                        arthur = v
-                        break
-                    end
+                    if not Players:GetPlayerFromCharacter(v) then arthur = v; break end
                 end
             end
             if arthur then
@@ -437,7 +423,7 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
--- ============================ ESP СИСТЕМА (ПО PROXIMITY PROMPT) ============================
+-- ============================ ESP СИСТЕМА ============================
 local espObjects = {}
 local lastEspUpdate = 0
 
@@ -473,15 +459,12 @@ local function updateESP()
         end
     end
 
-    -- ESP Предметов (Ищем по ProximityPrompt или словам)
     if Settings.ESPItems then
         for _, v in ipairs(workspace:GetDescendants()) do
             if (v:IsA("Model") or v:IsA("BasePart")) and not v:FindFirstChildOfClass("Highlight") then
                 local isItem = v:FindFirstChildOfClass("ProximityPrompt") ~= nil
                 local n = v.Name:lower()
-                if n:find("key") or n:find("med") or n:find("item") or n:find("tool") or n:find("ключ") or n:find("аптеч") or n:find("лут") then
-                    isItem = true
-                end
+                if n:find("key") or n:find("med") or n:find("item") or n:find("tool") or n:find("ключ") or n:find("аптеч") or n:find("лут") then isItem = true end
                 if isItem then
                     local h = Instance.new("Highlight", v)
                     h.FillColor = Color3.fromRGB(0, 255, 255); h.OutlineColor = Color3.fromRGB(255, 255, 255)
@@ -491,7 +474,6 @@ local function updateESP()
         end
     end
 
-    -- ESP Укрытий (Ищем по ProximityPrompt или словам шкаф/дверь)
     if Settings.ESPHideouts then
         for _, v in ipairs(workspace:GetDescendants()) do
             if (v:IsA("Model") or v:IsA("BasePart")) and not v:FindFirstChildOfClass("Highlight") then
@@ -675,7 +657,7 @@ TabNormal:CreateSlider({ Name = "Задержка (сек)", Range = {0.05, 1}, 
 TabNormal:CreateToggle({ Name = "Пропускать лестницу/бананы", CurrentValue = true, Flag = "skip_ladder", Callback = function(v) Settings.SkipLadder = v end })
 
 TabNormal:CreateSection("Защита")
-TabNormal:CreateToggle({ Name = "Анти раш (в шкаф)", CurrentValue = false, Flag = "antirush", Callback = function(v) if v then startAutoHide() else stopAutoHide() end end }) -- Заменил на AutoHide логику
+TabNormal:CreateToggle({ Name = "Анти раш (в шкаф)", CurrentValue = false, Flag = "antirush", Callback = function(v) if v then startAutoHide() else stopAutoHide() end end })
 TabNormal:CreateToggle({ Name = "Auto-Hide (Прятки при опасности)", CurrentValue = false, Flag = "autohide", Callback = function(v) if v then startAutoHide() else stopAutoHide() end end })
 TabNormal:CreateToggle({ Name = "Авто привет Артуру", CurrentValue = false, Flag = "autoarthur", Callback = function(v) if v then startAutoArthur() else stopAutoArthur() end end })
 TabNormal:CreateButton({ Name = "Сбросить прогресс фарма", Callback = function() visited = {}; startPos, lastPos, currentProgress = nil, nil, 0 end })
@@ -746,7 +728,7 @@ TabUtil:CreateToggle({
             if setrichpresence then
                 pcall(function()
                     setthreadidentity(7)
-                    setrichpresence("Играет в Murino Horror", "Фармит с SWILL Chet", "swill_icon")
+                    setrichpresence("Играет в Murino Horror", "Фармит с SWILL Cheat", "swill_icon")
                 end)
                 Rayfield:Notify({Title = "Discord RPC", Content = "Статус установлен!", Duration = 3})
             else
