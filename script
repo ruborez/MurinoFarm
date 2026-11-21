@@ -1,5 +1,5 @@
 -- Murino Horror | Ultra UI (Rayfield) | Solara/Xeno
--- Исправлено: Синтаксическая ошибка (end), Умный IQ-тест, Все функции
+-- Исправлено: IQ-тест (4 ответа), HUD (Этаж/Комнаты), ESP по ProximityPrompt, Auto-Hide
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
@@ -9,7 +9,6 @@ local Window = Rayfield:CreateWindow({
     ConfigurationSaving = {Enabled = true, FolderName = "MurinoFarmPro"},
     Discord = {Enabled = false},
     
-    -- ================= KEY SYSTEM =================
     KeySystem = true, 
     KeySettings = {
         Title = "Murino Farm Pro",
@@ -20,13 +19,11 @@ local Window = Rayfield:CreateWindow({
         GrabKeyFromSite = false, 
         Key = {"byrger"}
     }
-    -- ==============================================
 })
 
 local Players = game:GetService("Players")
 local p = Players.LocalPlayer
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 local VirtualUser = game:GetService("VirtualUser")
 local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
@@ -41,7 +38,6 @@ p.Idled:Connect(function()
     VirtualUser:ClickButton2(Vector2.new())
 end)
 
--- ============================ НАСТРОЙКИ ============================
 local Settings = {
     AutoFarm = false, Delay = 0.3, Mode = "Newest",
     ESPPlayers = false, ESPMonsters = false, ESPItems = false, ESPHideouts = false,
@@ -50,7 +46,7 @@ local Settings = {
     Noclip = false, Fly = false, FlySpeed = 50, InfJump = false,
     AntiTrap = false, DiscordRPC = false,
     FPSBoost = false, HighGraphics = false, ShowStats = false,
-    Nametag = false
+    Nametag = false, ShowFloorRoom = false
 }
 
 -- ============================ НИК НАД ГОЛОВОЙ ============================
@@ -58,7 +54,6 @@ local function updateNametag()
     if not p.Character then return end
     local head = p.Character:FindFirstChild("Head")
     if not head then return end
-    
     local oldTag = head:FindFirstChild("SWILL_Nametag")
     if oldTag then oldTag:Destroy() end
 
@@ -68,7 +63,6 @@ local function updateNametag()
         bill.Size = UDim2.new(0, 200, 0, 50)
         bill.StudsOffset = Vector3.new(0, 2.5, 0)
         bill.AlwaysOnTop = true
-
         local text = Instance.new("TextLabel", bill)
         text.Size = UDim2.new(1, 0, 1, 0)
         text.BackgroundTransparency = 1
@@ -77,7 +71,6 @@ local function updateNametag()
         text.TextSize = 20
         text.TextStrokeTransparency = 0
         text.TextScaled = true
-
         task.spawn(function()
             while bill.Parent do
                 text.TextColor3 = Color3.fromHSV((tick() % 5) / 5, 1, 1)
@@ -92,41 +85,27 @@ local function playSound(id, isGlobal)
     local sound = Instance.new("Sound")
     sound.SoundId = "rbxassetid://" .. tostring(id)
     sound.Volume = 3
-    
-    if isGlobal then 
-        sound.Parent = workspace 
-    else 
-        sound.Parent = SoundService 
-    end
-    
+    if isGlobal then sound.Parent = workspace else sound.Parent = SoundService end
     sound:Play()
     Debris:AddItem(sound, sound.TimeLength + 1)
 end
 
--- ============================ УМНЫЙ AUTO-IQ ============================
+-- ============================ УМНЫЙ AUTO-IQ (4 ОТВЕТА) ============================
 local autoIQThread = nil
 local lastSolvedEquation = ""
 
-local function stopAutoIQ()
-    Settings.AutoIQ = false
-    if autoIQThread then 
-        pcall(function() task.cancel(autoIQThread) end)
-        autoIQThread = nil 
-    end
-end
-
+local function stopAutoIQ() Settings.AutoIQ = false; if autoIQThread then pcall(function() task.cancel(autoIQThread) end); autoIQThread = nil end end
 local function startAutoIQ()
     stopAutoIQ()
     Settings.AutoIQ = true
     autoIQThread = task.spawn(function()
         while Settings.AutoIQ do
             task.wait(1)
-            
             local guis = {p:FindFirstChild("PlayerGui"), game:GetService("CoreGui")}
             local equation = nil
             local activeGui = nil
             
-            -- 1. Ищем текст с примером
+            -- Ищем текст с примером
             for _, gui in ipairs(guis) do
                 if gui then
                     for _, obj in ipairs(gui:GetDescendants()) do
@@ -134,9 +113,7 @@ local function startAutoIQ()
                             local txt = obj.Text
                             if txt:match("%d+") and (txt:lower():find("x") or txt:find("%*") or txt:find("%+") or txt:find("%-") or txt:find("х")) then
                                 if not txt:lower():find("сек") and not txt:lower():find("мин") then
-                                    equation = txt
-                                    activeGui = gui
-                                    break
+                                    equation = txt; activeGui = gui; break
                                 end
                             end
                         end
@@ -145,72 +122,92 @@ local function startAutoIQ()
                 if equation then break end
             end
 
-            -- 2. Если нашли пример и он новый
             if equation and equation ~= lastSolvedEquation then
                 lastSolvedEquation = equation
                 print("[SWILL IQ] Найден пример: " .. equation)
                 task.wait(1)
 
-                -- Очищаем строку
-                local cleanEq = equation:lower()
-                cleanEq = cleanEq:gsub("%s+", "")
-                cleanEq = cleanEq:gsub("x", "*")
-                cleanEq = cleanEq:gsub("х", "*")
-                cleanEq = cleanEq:gsub("=", "")
-                cleanEq = cleanEq:gsub("%?", "")
-                
-                -- Пытаемся посчитать
-                local success, result = pcall(function()
-                    return loadstring("return " .. cleanEq)()
-                end)
+                -- Считаем
+                local cleanEq = equation:lower():gsub("%s+", ""):gsub("x", "*"):gsub("х", "*"):gsub("=", ""):gsub("%?", "")
+                local success, result = pcall(function() return loadstring("return " .. cleanEq)() end)
                 
                 if success and type(result) == "number" then
                     local answer = tostring(math.floor(result))
                     print("[SWILL IQ] Ответ: " .. answer)
                     
-                    -- 3. Кликаем по кнопкам
-                    for i = 1, #answer do
-                        local digit = answer:sub(i, i)
-                        local clicked = false
-                        
-                        for _, btn in ipairs(activeGui:GetDescendants()) do
-                            if btn:IsA("TextButton") and btn.Visible then
-                                if btn.Text == digit or btn.Text == tostring(tonumber(digit)) then
-                                    local pos = Vector2.new(btn.AbsolutePosition.X + btn.AbsoluteSize.X / 2, btn.AbsolutePosition.Y + btn.AbsoluteSize.Y / 2)
-                                    VirtualUser:ClickButton1(pos)
-                                    clicked = true
-                                    break
-                                end
-                            end
-                        end
-                        
-                        if clicked then
-                            task.wait(0.5) -- Пауза между вводом цифр
-                        else
-                            print("[SWILL IQ] Не найдена кнопка: " .. digit)
-                        end
-                    end
-                    
-                    -- 4. Кнопка подтверждения
-                    task.wait(0.5)
+                    -- Ищем кнопку с ответом
+                    local foundButton = false
                     for _, btn in ipairs(activeGui:GetDescendants()) do
-                        if btn:IsA("TextButton") and btn.Visible then
-                            local txt = btn.Text:lower()
-                            if txt == "ввод" or txt == "enter" or txt == "ok" or txt == "подтвердить" then
+                        if btn:IsA("TextButton") or btn:IsA("TextLabel") then
+                            if btn.Text == answer or btn.Text == tostring(answer) .. " " then
                                 local pos = Vector2.new(btn.AbsolutePosition.X + btn.AbsoluteSize.X / 2, btn.AbsolutePosition.Y + btn.AbsoluteSize.Y / 2)
                                 VirtualUser:ClickButton1(pos)
-                                print("[SWILL IQ] Нажата кнопка подтверждения.")
+                                foundButton = true
+                                print("[SWILL IQ] Нажата кнопка с ответом: " .. answer)
                                 break
                             end
                         end
                     end
-                else
-                    print("[SWILL IQ] Ошибка в примере: " .. equation)
+                    if not foundButton then print("[SWILL IQ] Кнопка с ответом не найдена!") end
                 end
             end
         end
     end)
 end
+
+-- ============================ HUD (Этажи и Комнаты) ============================
+local hudGui = Instance.new("ScreenGui", CoreGui)
+hudGui.Name = "SWILL_HUD"
+hudGui.ResetOnSpawn = false
+
+local hudFrame = Instance.new("Frame", hudGui)
+hudFrame.Size = UDim2.new(0, 200, 0, 80)
+hudFrame.Position = UDim2.new(0, 10, 0, 70)
+hudFrame.BackgroundTransparency = 1
+
+local floorLabel = Instance.new("TextLabel", hudFrame)
+floorLabel.Size = UDim2.new(1, 0, 0.5, 0)
+floorLabel.BackgroundTransparency = 1
+floorLabel.TextColor3 = Color3.fromRGB(255, 150, 0)
+floorLabel.Font = Enum.Font.GothamBold
+floorLabel.TextSize = 16
+floorLabel.TextXAlignment = Enum.TextXAlignment.Left
+floorLabel.Text = "Этаж: ?"
+
+local roomLabel = Instance.new("TextLabel", hudFrame)
+roomLabel.Size = UDim2.new(1, 0, 0.5, 0)
+roomLabel.Position = UDim2.new(0, 0, 0.5, 0)
+roomLabel.BackgroundTransparency = 1
+roomLabel.TextColor3 = Color3.fromRGB(0, 200, 255)
+roomLabel.Font = Enum.Font.GothamBold
+roomLabel.TextSize = 16
+roomLabel.TextXAlignment = Enum.TextXAlignment.Left
+roomLabel.Text = "Комнат: ?"
+
+RunService.RenderStepped:Connect(function()
+    if not Settings.ShowFloorRoom then
+        hudFrame.Visible = false
+        return
+    end
+    hudFrame.Visible = true
+    
+    -- Ищем текст с этажом и комнатой в интерфейсе игрока
+    pcall(function()
+        local playerGui = p:FindFirstChild("PlayerGui")
+        if playerGui then
+            for _, obj in ipairs(playerGui:GetDescendants()) do
+                if obj:IsA("TextLabel") then
+                    local txt = obj.Text:lower()
+                    if txt:find("этаж") or txt:find("floor") then
+                        floorLabel.Text = "Этаж: " .. obj.Text:gsub("%D", "")
+                    elseif txt:find("комнат") or txt:find("room") then
+                        roomLabel.Text = "Комнат: " .. obj.Text:gsub("%D", "")
+                    end
+                end
+            end
+        end
+    end)
+end)
 
 -- ============================ СЧЕТЧИКИ FPS И ПИНГА ============================
 local statsGui = Instance.new("ScreenGui", CoreGui)
@@ -236,12 +233,8 @@ pingLabel.TextXAlignment = Enum.TextXAlignment.Left; pingLabel.Text = "Ping: 0 m
 local frameCount, lastTime, fps = 0, tick(), 60
 
 RunService.RenderStepped:Connect(function()
-    if not Settings.ShowStats then 
-        statsFrame.Visible = false
-        return 
-    end
+    if not Settings.ShowStats then statsFrame.Visible = false; return end
     statsFrame.Visible = true
-    
     frameCount = frameCount + 1
     if tick() - lastTime >= 1 then
         fps = math.floor(frameCount / (tick() - lastTime))
@@ -256,7 +249,7 @@ RunService.RenderStepped:Connect(function()
     end)
 end)
 
--- ============================ ОПТИМИЗАЦИЯ И ГРАФИКА ============================
+-- ============================ ОПТИМИЗАЦИЯ ============================
 local colorCorrection = Instance.new("ColorCorrectionEffect", Lighting); colorCorrection.Name = "SWILL_CC"; colorCorrection.Enabled = false
 local bloom = Instance.new("BloomEffect", Lighting); bloom.Name = "SWILL_Bloom"; bloom.Enabled = false; bloom.Intensity = 0.5; bloom.Size = 24
 
@@ -282,7 +275,7 @@ local function applyHighGraphics(enable)
     end
 end
 
--- ============================ AUTO-HIDE ============================
+-- ============================ АВТО-ХАЙД И АНТИ-РАШ ============================
 local autoHideThread = nil
 local function stopAutoHide() Settings.AutoHide = false; if autoHideThread then pcall(function() task.cancel(autoHideThread) end); autoHideThread = nil end end
 local function startAutoHide()
@@ -295,7 +288,7 @@ local function startAutoHide()
                 local isThreatClose = false
                 for _, plr in ipairs(Players:GetPlayers()) do
                     if plr ~= p and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                        if (plr.Character.HumanoidRootPart.Position - myRoot.Position).Magnitude < 50 then
+                        if (plr.Character.HumanoidRootPart.Position - myRoot.Position).Magnitude < 60 then
                             isThreatClose = true; break
                         end
                     end
@@ -303,12 +296,44 @@ local function startAutoHide()
                 if isThreatClose then
                     local closestCloset, minDist = nil, math.huge
                     for _, v in ipairs(workspace:GetDescendants()) do
-                        if v:IsA("BasePart") and (v.Name:lower():find("closet") or v.Name:lower():find("шкаф") or v.Name:lower():find("locker") or v.Name:lower():find("hide")) then
+                        if v:IsA("BasePart") and (v.Name:lower():find("closet") or v.Name:lower():find("шкаф") or v.Name:lower():find("locker") or v.Name:lower():find("hide") or v:FindFirstChildOfClass("ProximityPrompt")) then
                             local d = (v.Position - myRoot.Position).Magnitude
                             if d < minDist then minDist = d; closestCloset = v end
                         end
                     end
                     if closestCloset then myRoot.CFrame = CFrame.new(closestCloset.Position + Vector3.new(0, 2, 0)) end
+                end
+            end
+        end
+    end)
+end
+
+-- ============================ АВТО ПРИВЕТ АРТУРУ ============================
+local autoArthurThread = nil
+local function stopAutoArthur() Settings.AutoArthur = false; if autoArthurThread then pcall(function() task.cancel(autoArthurThread) end); autoArthurThread = nil end end
+local function startAutoArthur()
+    stopAutoArthur(); Settings.AutoArthur = true
+    autoArthurThread = task.spawn(function()
+        while Settings.AutoArthur do
+            task.wait(3)
+            local arthur = nil
+            -- Ищем любого NPC, у которого есть Humanoid, и это не игрок
+            for _, v in ipairs(workspace:GetDescendants()) do
+                if v:IsA("Model") and v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") then
+                    if not Players:GetPlayerFromCharacter(v) then
+                        arthur = v
+                        break
+                    end
+                end
+            end
+            if arthur then
+                local hr = arthur:FindFirstChild("HumanoidRootPart")
+                local myRoot = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+                if hr and myRoot then
+                    local myPos = myRoot.Position
+                    myRoot.CFrame = CFrame.new(hr.Position + Vector3.new(0, 3, 0))
+                    task.wait(1)
+                    myRoot.CFrame = CFrame.new(myPos)
                 end
             end
         end
@@ -347,6 +372,98 @@ UserInputService.JumpRequest:Connect(function()
     if Settings.InfJump and p.Character then
         local hum = p.Character:FindFirstChildOfClass("Humanoid")
         if hum then hum:ChangeState("Jumping") end
+    end
+end)
+
+-- ============================ ESP СИСТЕМА (ПО PROXIMITY PROMPT) ============================
+local espObjects = {}
+local lastEspUpdate = 0
+
+local function clearESP()
+    for _, obj in ipairs(espObjects) do if obj.highlight then obj.highlight:Destroy() end end
+    espObjects = {}
+end
+
+local function updateESP()
+    if tick() - lastEspUpdate < 1 then return end
+    lastEspUpdate = tick(); clearESP()
+    if not p.Character then return end
+
+    if Settings.ESPPlayers then
+        for _, other in ipairs(Players:GetPlayers()) do
+            if other ~= p and other.Character then
+                local h = Instance.new("Highlight", other.Character)
+                h.FillColor = Color3.fromRGB(255, 0, 0); h.FillTransparency = 0.5; h.OutlineColor = Color3.fromRGB(255, 0, 0)
+                table.insert(espObjects, {highlight = h})
+            end
+        end
+    end
+
+    if Settings.ESPMonsters then
+        local playerCharacters = {}
+        for _, plr in ipairs(Players:GetPlayers()) do if plr.Character then playerCharacters[plr.Character] = true end end
+        for _, v in ipairs(workspace:GetDescendants()) do
+            if v:IsA("Model") and not playerCharacters[v] and v:FindFirstChild("Humanoid") then
+                local h = Instance.new("Highlight", v)
+                h.FillColor = Color3.fromRGB(255, 255, 0); h.FillTransparency = 0.5; h.OutlineColor = Color3.fromRGB(255, 255, 0)
+                table.insert(espObjects, {highlight = h})
+            end
+        end
+    end
+
+    -- ESP Предметов (Ищем по ProximityPrompt или словам)
+    if Settings.ESPItems then
+        for _, v in ipairs(workspace:GetDescendants()) do
+            if (v:IsA("Model") or v:IsA("BasePart")) and not v:FindFirstChildOfClass("Highlight") then
+                local isItem = v:FindFirstChildOfClass("ProximityPrompt") ~= nil
+                local n = v.Name:lower()
+                if n:find("key") or n:find("med") or n:find("item") or n:find("tool") or n:find("ключ") or n:find("аптеч") or n:find("лут") then
+                    isItem = true
+                end
+                if isItem then
+                    local h = Instance.new("Highlight", v)
+                    h.FillColor = Color3.fromRGB(0, 255, 255); h.OutlineColor = Color3.fromRGB(255, 255, 255)
+                    table.insert(espObjects, {highlight = h})
+                end
+            end
+        end
+    end
+
+    -- ESP Укрытий (Ищем по ProximityPrompt или словам шкаф/дверь)
+    if Settings.ESPHideouts then
+        for _, v in ipairs(workspace:GetDescendants()) do
+            if (v:IsA("Model") or v:IsA("BasePart")) and not v:FindFirstChildOfClass("Highlight") then
+                local n = v.Name:lower()
+                if n:find("closet") or n:find("locker") or n:find("hide") or n:find("door") or n:find("шкаф") or n:find("дверь") or v:FindFirstChildOfClass("ProximityPrompt") then
+                    local h = Instance.new("Highlight", v)
+                    h.FillColor = Color3.fromRGB(0, 255, 0); h.OutlineColor = Color3.fromRGB(255, 255, 255)
+                    table.insert(espObjects, {highlight = h})
+                end
+            end
+        end
+    end
+end
+
+-- ============================ FULLBRIGHT И СКОРОСТЬ ============================
+local oldBrightness, oldAmbient, oldOutdoorAmbient, oldClockTime
+local function applyFullBright()
+    if Settings.FullBright then
+        oldBrightness = oldBrightness or Lighting.Brightness; oldAmbient = oldAmbient or Lighting.Ambient
+        oldOutdoorAmbient = oldOutdoorAmbient or Lighting.OutdoorAmbient; oldClockTime = oldClockTime or Lighting.ClockTime
+        Lighting.Brightness = 1; Lighting.Ambient = Color3.new(1,1,1); Lighting.OutdoorAmbient = Color3.new(1,1,1); Lighting.ClockTime = 14
+    else
+        if oldBrightness then
+            Lighting.Brightness = oldBrightness; Lighting.Ambient = oldAmbient
+            Lighting.OutdoorAmbient = oldOutdoorAmbient; Lighting.ClockTime = oldClockTime
+        end
+    end
+end
+
+RunService.RenderStepped:Connect(function()
+    if Settings.FullBright then applyFullBright() end
+    if p.Character then
+        local hum = p.Character:FindFirstChild("Humanoid")
+        if hum and hum.WalkSpeed ~= Settings.WalkSpeed then hum.WalkSpeed = Settings.WalkSpeed end
     end
 end)
 
@@ -429,7 +546,7 @@ task.spawn(function()
 end)
 
 -- ============================ УПРАВЛЕНИЕ ПОТОКАМИ ============================
-local farmThread, antiRushThread, autoArthurThread = nil, nil, nil
+local farmThread = nil
 local isSyncing = false
 
 local function stopFarm() Settings.AutoFarm = false; if farmThread then pcall(function() task.cancel(farmThread) end); farmThread = nil end end
@@ -453,162 +570,11 @@ local function startFarm()
     end)
 end
 
-local function stopAntiRush() Settings.AntiRush = false; if antiRushThread then pcall(function() task.cancel(antiRushThread) end); antiRushThread = nil end end
-local function startAntiRush()
-    stopAntiRush(); Settings.AntiRush = true
-    antiRushThread = task.spawn(function()
-        while Settings.AntiRush do
-            task.wait(0.5)
-            local function isRushActive()
-                for _, other in ipairs(Players:GetPlayers()) do
-                    if other ~= p and other.Character then
-                        local hr = other.Character:FindFirstChild("HumanoidRootPart"); local hum = other.Character:FindFirstChild("Humanoid")
-                        if hr and hum and hum.MoveDirection.Magnitude > 0 and hr.Velocity.Magnitude > 50 then return true end
-                    end
-                end
-                return false
-            end
-            if isRushActive() then
-                local myPos = getRoot() and getRoot().Position; local closest, bestD = nil, math.huge
-                if myPos then
-                    for _, v in ipairs(workspace:GetDescendants()) do
-                        if v:IsA("BasePart") and (v.Name:lower():find("closet") or v.Name:lower():find("шкаф") or v.Name:lower():find("shield")) then
-                            local dist = (v.Position - myPos).Magnitude
-                            if dist < bestD then bestD = dist; closest = v end
-                        end
-                    end
-                end
-                if closest then local root = getRoot(); if root then root.CFrame = CFrame.new(closest.Position + Vector3.new(0, 3, 0)) end; task.wait(1) end
-            end
-        end
-    end)
-end
-
-local function stopAutoArthur() Settings.AutoArthur = false; if autoArthurThread then pcall(function() task.cancel(autoArthurThread) end); autoArthurThread = nil end end
-local function startAutoArthur()
-    stopAutoArthur(); Settings.AutoArthur = true
-    autoArthurThread = task.spawn(function()
-        while Settings.AutoArthur do
-            task.wait(5)
-            local arthur = nil; local names = {"arthur", "артур", "npcharacter", "npc"}
-            for _, v in ipairs(workspace:GetDescendants()) do
-                if v:IsA("Model") and v:FindFirstChild("Humanoid") then
-                    local name = v.Name:lower()
-                    for _, n in ipairs(names) do if name:find(n) and not Players:GetPlayerFromCharacter(v) then arthur = v break end end
-                end
-                if arthur then break end
-            end
-            if arthur then
-                local hr = arthur:FindFirstChild("HumanoidRootPart") or arthur:FindFirstChild("Torso") or arthur:FindFirstChild("UpperTorso")
-                if hr then
-                    local myRoot = getRoot()
-                    if myRoot then local myPos = myRoot.Position; myRoot.CFrame = CFrame.new(hr.Position + Vector3.new(0, 3, 0)); task.wait(1); myRoot.CFrame = CFrame.new(myPos) end
-                end
-            end
-        end
-    end)
-end
-
 p.CharacterAdded:Connect(function()
     startPos, lastPos, currentProgress, visited = nil, nil, 0, {}
     if Settings.Fly then stopFly() end
     task.wait(1)
     updateNametag()
-end)
-
--- ============================ ESP СИСТЕМА ============================
-local espObjects = {}
-local lastEspUpdate = 0
-
-local function clearESP()
-    for _, obj in ipairs(espObjects) do if obj.highlight then obj.highlight:Destroy() end; if obj.frame then obj.frame:Destroy() end end
-    espObjects = {}
-end
-
-local function updateESP()
-    if tick() - lastEspUpdate < 1 then return end
-    lastEspUpdate = tick(); clearESP()
-
-    local myChar = p.Character; if not myChar then return end
-    local myRoot = myChar:FindFirstChild("HumanoidRootPart"); if not myRoot then return end
-
-    if Settings.ESPPlayers then
-        for _, other in ipairs(Players:GetPlayers()) do
-            if other ~= p and other.Character then
-                local hr = other.Character:FindFirstChild("HumanoidRootPart")
-                if hr then
-                    local h = Instance.new("Highlight", other.Character)
-                    h.FillColor = Color3.fromRGB(255, 0, 0); h.FillTransparency = 0.5; h.OutlineColor = Color3.fromRGB(255, 0, 0)
-                    table.insert(espObjects, {highlight = h, part = hr})
-                end
-            end
-        end
-    end
-
-    if Settings.ESPMonsters then
-        local playerCharacters = {}
-        for _, plr in ipairs(Players:GetPlayers()) do if plr.Character then playerCharacters[plr.Character] = true end end
-        for _, v in ipairs(workspace:GetDescendants()) do
-            if v:IsA("Model") and not playerCharacters[v] and v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") then
-                local h = Instance.new("Highlight", v)
-                h.FillColor = Color3.fromRGB(255, 255, 0); h.FillTransparency = 0.5; h.OutlineColor = Color3.fromRGB(255, 255, 0)
-                table.insert(espObjects, {highlight = h, part = v.HumanoidRootPart})
-            end
-        end
-    end
-
-    if Settings.ESPItems then
-        for _, v in ipairs(workspace:GetDescendants()) do
-            if v:IsA("Model") or v:IsA("Tool") or v:IsA("BasePart") then
-                local n = v.Name:lower()
-                if n:find("key") or n:find("med") or n:find("battery") or n:find("exit") or n:find("item") or n:find("tool") or n:find("ключ") or n:find("аптеч") or n:find("выход") then
-                    if not v:FindFirstChildOfClass("Highlight") then
-                        local h = Instance.new("Highlight", v)
-                        h.FillColor = Color3.fromRGB(0, 255, 255); h.OutlineColor = Color3.fromRGB(255, 255, 255)
-                        table.insert(espObjects, {highlight = h, part = v})
-                    end
-                end
-            end
-        end
-    end
-
-    if Settings.ESPHideouts then
-        for _, v in ipairs(workspace:GetDescendants()) do
-            if v:IsA("Model") or v:IsA("BasePart") then
-                local n = v.Name:lower()
-                if n:find("closet") or n:find("locker") or n:find("hide") or n:find("cabinet") or n:find("wardrobe") or n:find("шкаф") or n:find("укрыт") then
-                    if not v:FindFirstChildOfClass("Highlight") then
-                        local h = Instance.new("Highlight", v)
-                        h.FillColor = Color3.fromRGB(0, 255, 0); h.OutlineColor = Color3.fromRGB(255, 255, 255)
-                        table.insert(espObjects, {highlight = h, part = v})
-                    end
-                end
-            end
-        end
-    end
-end
-
--- ============================ FULLBRIGHT И СКОРОСТЬ ============================
-local oldBrightness, oldAmbient, oldOutdoorAmbient, oldClockTime
-local function applyFullBright()
-    if Settings.FullBright then
-        oldBrightness = oldBrightness or Lighting.Brightness; oldAmbient = oldAmbient or Lighting.Ambient
-        oldOutdoorAmbient = oldOutdoorAmbient or Lighting.OutdoorAmbient; oldClockTime = oldClockTime or Lighting.ClockTime
-        Lighting.Brightness = 1; Lighting.Ambient = Color3.new(1,1,1); Lighting.OutdoorAmbient = Color3.new(1,1,1); Lighting.ClockTime = 14
-    else
-        if oldBrightness then
-            Lighting.Brightness = oldBrightness; Lighting.Ambient = oldAmbient
-            Lighting.OutdoorAmbient = oldOutdoorAmbient; Lighting.ClockTime = oldClockTime
-        end
-    end
-end
-
-RunService.RenderStepped:Connect(function()
-    if Settings.FullBright then applyFullBright() end
-    if p.Character then
-        local hum = p.Character:FindFirstChild("Humanoid")
-        if hum and hum.WalkSpeed ~= Settings.WalkSpeed then hum.WalkSpeed = Settings.WalkSpeed end
-    end
 end)
 
 -- ============================ RAYFIELD UI ============================
@@ -647,7 +613,7 @@ TabNormal:CreateSlider({ Name = "Задержка (сек)", Range = {0.05, 1}, 
 TabNormal:CreateToggle({ Name = "Пропускать лестницу/бананы", CurrentValue = true, Flag = "skip_ladder", Callback = function(v) Settings.SkipLadder = v end })
 
 TabNormal:CreateSection("Защита")
-TabNormal:CreateToggle({ Name = "Анти раш (в шкаф)", CurrentValue = false, Flag = "antirush", Callback = function(v) if v then startAntiRush() else stopAntiRush() end end })
+TabNormal:CreateToggle({ Name = "Анти раш (в шкаф)", CurrentValue = false, Flag = "antirush", Callback = function(v) if v then startAutoHide() else stopAutoHide() end end }) -- Заменил на AutoHide логику
 TabNormal:CreateToggle({ Name = "Auto-Hide (Прятки при опасности)", CurrentValue = false, Flag = "autohide", Callback = function(v) if v then startAutoHide() else stopAutoHide() end end })
 TabNormal:CreateToggle({ Name = "Авто привет Артуру", CurrentValue = false, Flag = "autoarthur", Callback = function(v) if v then startAutoArthur() else stopAutoArthur() end end })
 TabNormal:CreateButton({ Name = "Сбросить прогресс фарма", Callback = function() visited = {}; startPos, lastPos, currentProgress = nil, nil, 0 end })
@@ -675,7 +641,7 @@ FarmToggle2 = TabManiac:CreateToggle({
 TabManiac:CreateDropdown({ Name = "Режим выбора", Options = {"Newest", "Progress", "Direction", "Nearest"}, CurrentOption = "Newest", Flag = "mode_maniac", Callback = function(opt) Settings.Mode = opt end })
 TabManiac:CreateSlider({ Name = "Задержка (сек)", Range = {0.05, 1}, Increment = 0.01, Suffix = "сек", CurrentValue = 0.3, Flag = "delay_maniac", Callback = function(v) Settings.Delay = v end })
 TabManiac:CreateSection("Помощник")
-TabManiac:CreateToggle({ Name = "Умный Авто IQ-тест", CurrentValue = false, Flag = "auto_iq", Callback = function(v) if v then startAutoIQ() else stopAutoIQ() end end })
+TabManiac:CreateToggle({ Name = "Умный Авто IQ-тест (4 ответа)", CurrentValue = false, Flag = "auto_iq", Callback = function(v) if v then startAutoIQ() else stopAutoIQ() end end })
 
 -- ДВИЖЕНИЕ
 TabMove:CreateSection("Основное")
@@ -692,7 +658,7 @@ TabVis:CreateSection("ESP")
 TabVis:CreateToggle({ Name = "ESP игроков", CurrentValue = false, Flag = "esp_players", Callback = function(v) Settings.ESPPlayers = v end })
 TabVis:CreateToggle({ Name = "ESP монстров", CurrentValue = false, Flag = "esp_monsters", Callback = function(v) Settings.ESPMonsters = v end })
 TabVis:CreateToggle({ Name = "ESP предметов (Лут/Ключи)", CurrentValue = false, Flag = "esp_items", Callback = function(v) Settings.ESPItems = v end })
-TabVis:CreateToggle({ Name = "ESP укрытий (Шкафы)", CurrentValue = false, Flag = "esp_hideouts", Callback = function(v) Settings.ESPHideouts = v end })
+TabVis:CreateToggle({ Name = "ESP укрытий (Шкафы/Двери)", CurrentValue = false, Flag = "esp_hideouts", Callback = function(v) Settings.ESPHideouts = v end })
 TabVis:CreateSection("Освещение")
 TabVis:CreateToggle({ Name = "FullBright", CurrentValue = false, Flag = "fullbright", Callback = function(v) Settings.FullBright = v; applyFullBright() end })
 
@@ -702,8 +668,9 @@ TabOpt:CreateToggle({ Name = "FPS Boost (Убрать тени/частицы)",
 TabOpt:CreateToggle({ Name = "Улучшение графики (Bloom/Цвета)", CurrentValue = false, Flag = "high_gfx", Callback = function(v) Settings.HighGraphics = v; applyHighGraphics(v) end })
 TabOpt:CreateSection("Информация")
 TabOpt:CreateToggle({ Name = "Показать FPS и Пинг", CurrentValue = false, Flag = "show_stats", Callback = function(v) Settings.ShowStats = v; statsFrame.Visible = v end })
+TabOpt:CreateToggle({ Name = "Показать Этаж и Комнаты (HUD)", CurrentValue = false, Flag = "show_floor", Callback = function(v) Settings.ShowFloorRoom = v; hudFrame.Visible = v end })
 
--- УТИЛИТЫ (Исправленная ошибка синтаксиса)
+-- УТИЛИТЫ
 TabUtil:CreateSection("Безопасность")
 TabUtil:CreateToggle({ Name = "Anti-Trap (Удаление ловушек)", CurrentValue = false, Flag = "anti_trap", Callback = function(v) Settings.AntiTrap = v end })
 TabUtil:CreateSection("Интеграции")
@@ -717,7 +684,7 @@ TabUtil:CreateToggle({
             if setrichpresence then
                 pcall(function()
                     setthreadidentity(7)
-                    setrichpresence("Играет в Murino Horror", "Фармит с SWILL Cheat", "swill_icon")
+                    setrichpresence("Играет в Murino Horror", "Фармит с SWILL Chet", "swill_icon")
                 end)
                 Rayfield:Notify({Title = "Discord RPC", Content = "Статус установлен!", Duration = 3})
             else
@@ -746,8 +713,7 @@ TabFun:CreateButton({ Name = "🔊 Bass Meme", Callback = function() playSound("
 TabFun:CreateButton({ Name = "🔊 Vine Boom", Callback = function() playSound("5153476613", true) end })
 TabFun:CreateButton({ Name = "🔊 Bruh", Callback = function() playSound("5153290981", true) end })
 
--- УВЕДОМЛЕНИЕ
-Rayfield:Notify("Скрипт загружен! Умный IQ-тест активен.")
+Rayfield:Notify("Скрипт загружен! Проверь консоль (F9) для отладки IQ-теста.")
 
 task.spawn(function()
     while true do
