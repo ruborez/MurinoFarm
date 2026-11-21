@@ -1,5 +1,5 @@
 -- Murino Horror | Ultra UI (Rayfield) | Solara/Xeno
--- Исправлено: IQ-тест (игнорирует меню), защита звуков, HUD
+-- Исправлено: Анти-Туман (поворот перед ТП), Пауза фарма на IQ-тесте
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
@@ -13,11 +13,11 @@ local Window = Rayfield:CreateWindow({
     KeySettings = {
         Title = "Murino Farm Pro",
         Subtitle = "Key System | by ruborez",
-        Note = "Введи ключ для доступа.\nТестовый ключ: byrger",
+        Note = "Введи ключ для доступа.",
         FileName = "MurinoKey.txt",
         SaveKey = true,
         GrabKeyFromSite = false, 
-        Key = {"byrger"}
+        Key = {"alica"}
     }
 })
 
@@ -48,6 +48,8 @@ local Settings = {
     FPSBoost = false, HighGraphics = false, ShowStats = false,
     Nametag = false, ShowFloorRoom = false
 }
+
+local isIQTestActive = false -- Глобальный флаг для паузы фарма
 
 -- ============================ НИК НАД ГОЛОВОЙ ============================
 local function updateNametag()
@@ -92,11 +94,11 @@ local function playSound(id, isGlobal)
     end)
 end
 
--- ============================ УМНЫЙ AUTO-IQ (ИСПРАВЛЕН) ============================
+-- ============================ УМНЫЙ AUTO-IQ (С ПАУЗОЙ ФАРМА) ============================
 local autoIQThread = nil
 local lastSolvedEquation = ""
 
-local function stopAutoIQ() Settings.AutoIQ = false; if autoIQThread then pcall(function() task.cancel(autoIQThread) end); autoIQThread = nil end end
+local function stopAutoIQ() Settings.AutoIQ = false; isIQTestActive = false; if autoIQThread then pcall(function() task.cancel(autoIQThread) end); autoIQThread = nil end end
 local function startAutoIQ()
     stopAutoIQ()
     Settings.AutoIQ = true
@@ -112,20 +114,17 @@ local function startAutoIQ()
                 if gui then
                     for _, obj in ipairs(gui:GetDescendants()) do
                         if obj:IsA("TextLabel") and obj.Text ~= "" then
-                            -- Проверка: не является ли это меню Rayfield
                             local isRayfield = false
                             local parent = obj
                             while parent do
                                 if parent.Name == "Rayfield" or parent.Name:lower():find("rayfield") then
-                                    isRayfield = true
-                                    break
+                                    isRayfield = true; break
                                 end
                                 parent = parent.Parent
                             end
                             
                             if not isRayfield then
                                 local txt = obj.Text
-                                -- Строгий поиск математики (число + знак + число)
                                 if txt:match("%d+%s*[%+%-%*xх/]%s*%d+") then
                                     equation = txt; activeGui = gui; break
                                 end
@@ -137,11 +136,11 @@ local function startAutoIQ()
             end
 
             if equation and equation ~= lastSolvedEquation then
+                isIQTestActive = true
                 lastSolvedEquation = equation
                 print("[SWILL IQ] Найден пример: " .. equation)
                 task.wait(1)
 
-                -- Считаем
                 local cleanEq = equation:lower():gsub("%s+", ""):gsub("x", "*"):gsub("х", "*"):gsub("=", ""):gsub("%?", "")
                 local success, result = pcall(function() return loadstring("return " .. cleanEq)() end)
                 
@@ -149,7 +148,6 @@ local function startAutoIQ()
                     local answer = tostring(math.floor(result))
                     print("[SWILL IQ] Ответ: " .. answer)
                     
-                    -- Ищем кнопку с ответом
                     local foundButton = false
                     for _, btn in ipairs(activeGui:GetDescendants()) do
                         if btn:IsA("TextButton") or btn:IsA("TextLabel") then
@@ -164,6 +162,9 @@ local function startAutoIQ()
                     end
                     if not foundButton then print("[SWILL IQ] Кнопка с ответом не найдена!") end
                 end
+                -- Ждем 3 секунды после теста, чтобы игра вернула управление
+                task.wait(3)
+                isIQTestActive = false
             end
         end
     end)
@@ -199,16 +200,11 @@ roomLabel.TextXAlignment = Enum.TextXAlignment.Left
 roomLabel.Text = "Комнат: ?"
 
 RunService.RenderStepped:Connect(function()
-    if not Settings.ShowFloorRoom then
-        hudFrame.Visible = false
-        return
-    end
+    if not Settings.ShowFloorRoom then hudFrame.Visible = false; return end
     hudFrame.Visible = true
-    
     local myRoot = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
     local foundFloor, foundRoom = false, false
     
-    -- 1. Поиск в интерфейсе (UI)
     pcall(function()
         local guis = {p:FindFirstChild("PlayerGui"), game:GetService("CoreGui")}
         for _, gui in ipairs(guis) do
@@ -217,12 +213,10 @@ RunService.RenderStepped:Connect(function()
                     if obj:IsA("TextLabel") or obj:IsA("TextButton") then
                         local txt = obj.Text:lower()
                         if (txt:find("этаж") or txt:find("floor")) and not foundFloor then
-                            local num = txt:match("%d+")
-                            if num then floorLabel.Text = "Этаж: " .. num; foundFloor = true end
+                            local num = txt:match("%d+"); if num then floorLabel.Text = "Этаж: " .. num; foundFloor = true end
                         end
                         if (txt:find("комнат") or txt:find("room")) and not foundRoom then
-                            local num = txt:match("%d+")
-                            if num then roomLabel.Text = "Комнат: " .. num; foundRoom = true end
+                            local num = txt:match("%d+"); if num then roomLabel.Text = "Комнат: " .. num; foundRoom = true end
                         end
                     end
                 end
@@ -230,7 +224,6 @@ RunService.RenderStepped:Connect(function()
         end
     end)
     
-    -- 2. Резервный метод: поиск 3D-табличек в Workspace
     if not foundFloor then
         pcall(function()
             local closestFloor, minDist = nil, math.huge
@@ -251,7 +244,6 @@ RunService.RenderStepped:Connect(function()
         end)
     end
     
-    -- 3. Если ничего не нашли — показываем высоту по Y
     if not foundFloor then
         if myRoot then floorLabel.Text = "Высота: " .. math.floor(myRoot.Position.Y) .. " studs" else floorLabel.Text = "Высота: ?" end
     end
@@ -511,7 +503,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ============================ БАЗОВЫЕ ФУНКЦИИ ============================
+-- ============================ БАЗОВЫЕ ФУНКЦИИ (АНТИ-ТУМАН) ============================
 local function getRoot() local char = p.Character; return char and char:FindFirstChild("HumanoidRootPart") end
 local triggers, visited, order = {}, {}, 0
 local startPos, lastPos, currentProgress = nil, nil, 0
@@ -541,27 +533,24 @@ local function isDangerous(pos)
     return false
 end
 
-local function pickTarget(hPos)
-    local best, bestScore = nil, math.huge; local dir = Vector3.zero
-    if startPos then dir = (hPos - startPos); if dir.Magnitude < 0.1 then dir = Vector3.new(1,0,0) end; dir = dir.Unit end
+-- Умный выбор цели (игнорируем те, что сзади)
+local function pickTarget(hPos, hCFrame)
+    local best, bestScore = nil, math.huge
     for _, t in ipairs(triggers) do
         local o = t.part
         if o and o.Parent and not visited[o] then
             local po = o.Position
             if isDangerous(po) then visited[o] = true; continue end
-            if Settings.Mode == "Newest" then
-                local score = -t.order; if score < bestScore then bestScore, best = score, o end
-            elseif Settings.Mode == "Progress" then
-                local fromStart = (po - startPos).Magnitude
-                if fromStart > currentProgress + 2 then
-                    local d = (po - hPos).Magnitude; local score = d - fromStart*0.5
-                    if score < bestScore then bestScore, best = score, o end
-                end
-            elseif Settings.Mode == "Direction" then
-                local ddir = dir; if lastPos and (hPos-lastPos).Magnitude > 0.5 then ddir = (hPos-lastPos).Unit end
-                local proj = (po - hPos):Dot(ddir)
-                if proj > 1 then local d = (po - hPos).Magnitude; local score = d - proj*0.5; if score < bestScore then bestScore, best = score, o end end
-            else local d = (po - hPos).Magnitude; if d < bestScore then bestScore, best = d, o end end
+            
+            -- Проверка направления (не идем назад)
+            local dirToTarget = (po - hPos).Unit
+            local lookVector = hCFrame.LookVector
+            local dot = dirToTarget:Dot(lookVector)
+            
+            if dot > -0.5 then -- Если цель не сзади
+                local d = (po - hPos).Magnitude
+                if d < bestScore then bestScore, best = d, o end
+            end
         end
     end
     return best
@@ -599,16 +588,25 @@ local function startFarm()
     farmThread = task.spawn(function()
         while Settings.AutoFarm do
             task.wait(Settings.Delay)
+            if isIQTestActive then task.wait(1); continue end -- ПАУЗА ФАРМА НА IQ ТЕСТЕ
+            
             local h = getRoot()
             if h then
                 local hPos = h.Position
+                local hCFrame = h.CFrame
                 if not startPos then startPos, lastPos, currentProgress = hPos, hPos, 0 end
-                local target = pickTarget(hPos)
+                local target = pickTarget(hPos, hCFrame)
+                
                 if target then
-                    markPair(target); h.CFrame = CFrame.new(target.Position + Vector3.new(0, 3, 0))
-                    lastPos = target.Position; local dist = (target.Position - startPos).Magnitude
+                    markPair(target)
+                    -- АНТИ-ТУМАН: Разворачиваем персонажа лицом к цели и ТП
+                    h.CFrame = CFrame.new(target.Position + Vector3.new(0, 3, 0), target.Position)
+                    lastPos = target.Position
+                    local dist = (target.Position - startPos).Magnitude
                     if dist > currentProgress then currentProgress = dist end
-                else lastPos = hPos end
+                else 
+                    lastPos = hPos 
+                end
             end
         end
     end)
@@ -652,8 +650,8 @@ FarmToggle = TabNormal:CreateToggle({
         isSyncing = false
     end 
 })
-TabNormal:CreateDropdown({ Name = "Режим выбора", Options = {"Newest", "Progress", "Direction", "Nearest"}, CurrentOption = "Newest", Flag = "mode", Callback = function(opt) Settings.Mode = opt end })
-TabNormal:CreateSlider({ Name = "Задержка (сек)", Range = {0.05, 1}, Increment = 0.01, Suffix = "сек", CurrentValue = 0.3, Flag = "delay", Callback = function(v) Settings.Delay = v end })
+TabNormal:CreateDropdown({ Name = "Режим выбора", Options = {"Nearest"}, CurrentOption = "Nearest", Flag = "mode", Callback = function(opt) Settings.Mode = opt end })
+TabNormal:CreateSlider({ Name = "Задержка (сек)", Range = {0.1, 1}, Increment = 0.05, Suffix = "сек", CurrentValue = 0.3, Flag = "delay", Callback = function(v) Settings.Delay = v end })
 TabNormal:CreateToggle({ Name = "Пропускать лестницу/бананы", CurrentValue = true, Flag = "skip_ladder", Callback = function(v) Settings.SkipLadder = v end })
 
 TabNormal:CreateSection("Защита")
@@ -682,8 +680,8 @@ FarmToggle2 = TabManiac:CreateToggle({
         isSyncing = false
     end 
 })
-TabManiac:CreateDropdown({ Name = "Режим выбора", Options = {"Newest", "Progress", "Direction", "Nearest"}, CurrentOption = "Newest", Flag = "mode_maniac", Callback = function(opt) Settings.Mode = opt end })
-TabManiac:CreateSlider({ Name = "Задержка (сек)", Range = {0.05, 1}, Increment = 0.01, Suffix = "сек", CurrentValue = 0.3, Flag = "delay_maniac", Callback = function(v) Settings.Delay = v end })
+TabManiac:CreateDropdown({ Name = "Режим выбора", Options = {"Nearest"}, CurrentOption = "Nearest", Flag = "mode_maniac", Callback = function(opt) Settings.Mode = opt end })
+TabManiac:CreateSlider({ Name = "Задержка (сек)", Range = {0.1, 1}, Increment = 0.05, Suffix = "сек", CurrentValue = 0.3, Flag = "delay_maniac", Callback = function(v) Settings.Delay = v end })
 TabManiac:CreateSection("Помощник")
 TabManiac:CreateToggle({ Name = "Умный Авто IQ-тест (4 ответа)", CurrentValue = false, Flag = "auto_iq", Callback = function(v) if v then startAutoIQ() else stopAutoIQ() end end })
 
@@ -757,7 +755,7 @@ TabFun:CreateButton({ Name = "🔊 Bass Meme", Callback = function() playSound("
 TabFun:CreateButton({ Name = "🔊 Vine Boom", Callback = function() playSound("5153476613", true) end })
 TabFun:CreateButton({ Name = "🔊 Bruh", Callback = function() playSound("5153290981", true) end })
 
-Rayfield:Notify("Скрипт загружен! Проверь консоль (F9) для отладки IQ-теста.")
+Rayfield:Notify("Скрипт загружен! Анти-Туман активен.")
 
 task.spawn(function()
     while true do
