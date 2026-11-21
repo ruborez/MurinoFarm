@@ -1,5 +1,5 @@
--- Murino Horror | Ultra Farm & Visuals | Solara
--- Исправлено: Автофарм больше не залипает, защита от Тумана (Velocity), пауза IQ-теста.
+-- Murino Horror | Ultra UI (Rayfield) | Solara/Xeno
+-- Вернул старый добрый фарм без падений. Уведомления IQ и Фарма на месте.
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
@@ -532,7 +532,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ============================ БАЗОВЫЕ ФУНКЦИИ (АНТИ-ТУМАН) ============================
+-- ============================ БАЗОВЫЕ ФУНКЦИИ (ВОЗВРАЩЕН СТАРЫЙ ТП) ============================
 local function getRoot() local char = p.Character; return char and char:FindFirstChild("HumanoidRootPart") end
 local triggers, visited, order = {}, {}, 0
 local startPos, lastPos, currentProgress = nil, nil, 0
@@ -562,7 +562,7 @@ local function isDangerous(pos)
     return false
 end
 
--- Выбор ближайшего триггера (без фильтра направления)
+-- Выбор ближайшего триггера
 local function pickTarget(hPos)
     local best, bestScore = nil, math.huge
     for _, t in ipairs(triggers) do
@@ -619,10 +619,8 @@ local function startFarm()
                 
                 if target then
                     markPair(target)
-                    -- Анти-туман: разворачиваем персонажа лицом к цели и обнуляем скорость
-                    h.CFrame = CFrame.new(target.Position + Vector3.new(0, 3, 0), target.Position)
-                    h.AssemblyLinearVelocity = Vector3.zero
-                    
+                    -- Старый рабочий телепорт без разворотов и сброса скорости
+                    h.CFrame = CFrame.new(target.Position + Vector3.new(0, 3, 0))
                     lastPos = target.Position
                     local dist = (target.Position - startPos).Magnitude
                     if dist > currentProgress then currentProgress = dist end
@@ -781,7 +779,7 @@ TabFun:CreateButton({ Name = "🔊 Bass Meme", Callback = function() playSound("
 TabFun:CreateButton({ Name = "🔊 Vine Boom", Callback = function() playSound("5153476613", true) end })
 TabFun:CreateButton({ Name = "🔊 Bruh", Callback = function() playSound("5153290981", true) end })
 
-Rayfield:Notify("Скрипт загружен! Автофарм исправлен.")
+Rayfield:Notify("Скрипт загружен! Автофарм возвращен.")
 
 task.spawn(function()
     while true do
