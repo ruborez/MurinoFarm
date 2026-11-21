@@ -191,24 +191,86 @@ RunService.RenderStepped:Connect(function()
     end
     hudFrame.Visible = true
     
-    -- Ищем текст с этажом и комнатой в интерфейсе игрока
+    local myRoot = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+    local foundFloor, foundRoom = false, false
+    
+    -- 1. Поиск в интерфейсе (UI)
     pcall(function()
-        local playerGui = p:FindFirstChild("PlayerGui")
-        if playerGui then
-            for _, obj in ipairs(playerGui:GetDescendants()) do
-                if obj:IsA("TextLabel") then
-                    local txt = obj.Text:lower()
-                    if txt:find("этаж") or txt:find("floor") then
-                        floorLabel.Text = "Этаж: " .. obj.Text:gsub("%D", "")
-                    elseif txt:find("комнат") or txt:find("room") then
-                        roomLabel.Text = "Комнат: " .. obj.Text:gsub("%D", "")
+        local guis = {p:FindFirstChild("PlayerGui"), game:GetService("CoreGui")}
+        for _, gui in ipairs(guis) do
+            if gui then
+                for _, obj in ipairs(gui:GetDescendants()) do
+                    if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+                        local txt = obj.Text:lower()
+                        -- Ищем этаж
+                        if (txt:find("этаж") or txt:find("floor")) and not foundFloor then
+                            local num = txt:match("%d+")
+                            if num then 
+                                floorLabel.Text = "Этаж: " .. num
+                                foundFloor = true 
+                            end
+                        end
+                        -- Ищем комнату
+                        if (txt:find("комнат") or txt:find("room")) and not foundRoom then
+                            local num = txt:match("%d+")
+                            if num then 
+                                roomLabel.Text = "Комнат: " .. num
+                                foundRoom = true 
+                            end
+                        end
                     end
                 end
             end
         end
     end)
+    
+    -- 2. Резервный метод: поиск 3D-табличек в Workspace (например, Floor1, RoomMarker)
+    if not foundFloor then
+        pcall(function()
+            local closestFloor, minDist = nil, math.huge
+            for _, v in ipairs(workspace:GetDescendants()) do
+                if v:IsA("BasePart") or v:IsA("Model") then
+                    local n = v.Name:lower()
+                    if n:find("floor") or n:find("этаж") then
+                        local num = v.Name:match("%d+")
+                        if num and myRoot then
+                            local pos = v:IsA("Model") and (v.PrimaryPart and v.PrimaryPart.Position or v:GetPivot().Position) or v.Position
+                            local d = (pos - myRoot.Position).Magnitude
+                            if d < minDist then
+                                minDist = d
+                                closestFloor = num
+                            end
+                        end
+                    end
+                end
+            end
+            if closestFloor then
+                floorLabel.Text = "Этаж: " .. closestFloor
+                foundFloor = true
+            end
+        end)
+    end
+    
+    -- 3. Если ничего не нашли — показываем высоту по Y и кол-во пройденных комнат
+    if not foundFloor then
+        if myRoot then
+            floorLabel.Text = "Высота: " .. math.floor(myRoot.Position.Y) .. " studs"
+        else
+            floorLabel.Text = "Высота: ?"
+        end
+    end
+    
+    if not foundRoom then
+        -- Считаем пройденные триггеры (это и есть комнаты)
+        local visitedCount = 0
+        for _ in pairs(visited) do visitedCount = visitedCount + 1 end
+        if visitedCount > 0 then
+            roomLabel.Text = "Пройдено комнат: " .. visitedCount
+        else
+            roomLabel.Text = "Комнат: ?"
+        end
+    end
 end)
-
 -- ============================ СЧЕТЧИКИ FPS И ПИНГА ============================
 local statsGui = Instance.new("ScreenGui", CoreGui)
 statsGui.Name = "SWILL_Stats"
