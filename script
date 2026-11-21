@@ -1,5 +1,5 @@
--- Murino Horror | Ultra UI (Rayfield) | Solara/Xeno
--- Обновлено: Уведомления IQ-теста (за 1 мин) и Автофарма
+-- Murino Horror | Ultra Farm & Visuals | Solara
+-- Исправлено: Автофарм больше не залипает, защита от Тумана (Velocity), пауза IQ-теста.
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
@@ -39,7 +39,7 @@ p.Idled:Connect(function()
 end)
 
 local Settings = {
-    AutoFarm = false, Delay = 0.3, Mode = "Newest",
+    AutoFarm = false, Delay = 0.3, Mode = "Nearest",
     ESPPlayers = false, ESPMonsters = false, ESPItems = false, ESPHideouts = false,
     AntiRush = false, AutoArthur = false, AutoIQ = false, AutoHide = false,
     WalkSpeed = 16, FullBright = false, SkipLadder = true,
@@ -50,7 +50,7 @@ local Settings = {
 }
 
 local isIQTestActive = false 
-local iqWarningSent = false -- Флаг, чтобы не спамить уведомлением
+local iqWarningSent = false
 
 -- ============================ НИК НАД ГОЛОВОЙ ============================
 local function updateNametag()
@@ -95,35 +95,35 @@ local function playSound(id, isGlobal)
     end)
 end
 
--- ============================ ТАЙМЕР IQ-ТЕСТА (УВЕДОМЛЕНИЕ ЗА 1 МИНУТУ) ============================
+-- ============================ ТАЙМЕР IQ-ТЕСТА ============================
 task.spawn(function()
     while true do
         task.wait(1)
         if not Settings.AutoIQ then continue end
         
         local guis = {p:FindFirstChild("PlayerGui"), game:GetService("CoreGui")}
-        for _, gui in ipairs(guis) do
-            if gui then
-                for _, obj in ipairs(gui:GetDescendants()) do
-                    if obj:IsA("TextLabel") then
-                        local txt = obj.Text:lower()
-                        -- Ищем таймер с "IQ" или "тест" и двоеточием (например, 01:00)
-                        if (txt:find("iq") or txt:find("тест")) and txt:find(":") then
-                            local min, sec = txt:match("(%d+):(%d+)")
-                            if min and sec then
-                                min, sec = tonumber(min), tonumber(sec)
-                                local totalSec = (min * 60) + sec
-                                -- Если осталось от 55 до 60 секунд, и уведомление еще не отправлено
-                                if totalSec <= 60 and totalSec > 55 and not iqWarningSent then
-                                    iqWarningSent = true
-                                    Rayfield:Notify({Title = "Внимание!", Content = "IQ-тест через 1 минуту! Приготовься.", Duration = 5})
+        pcall(function()
+            for _, gui in ipairs(guis) do
+                if gui then
+                    for _, obj in ipairs(gui:GetDescendants()) do
+                        if obj:IsA("TextLabel") then
+                            local txt = obj.Text:lower()
+                            if (txt:find("iq") or txt:find("тест")) and txt:find(":") then
+                                local min, sec = txt:match("(%d+):(%d+)")
+                                if min and sec then
+                                    min, sec = tonumber(min), tonumber(sec)
+                                    local totalSec = (min * 60) + sec
+                                    if totalSec <= 60 and totalSec > 55 and not iqWarningSent then
+                                        iqWarningSent = true
+                                        Rayfield:Notify({Title = "Внимание!", Content = "IQ-тест через 1 минуту! Приготовься.", Duration = 5})
+                                    end
                                 end
                             end
                         end
                     end
                 end
             end
-        end
+        end)
     end
 end)
 
@@ -142,58 +142,64 @@ local function startAutoIQ()
             local equation = nil
             local activeGui = nil
             
-            for _, gui in ipairs(guis) do
-                if gui then
-                    for _, obj in ipairs(gui:GetDescendants()) do
-                        if obj:IsA("TextLabel") and obj.Text ~= "" then
-                            local isRayfield = false
-                            local parent = obj
-                            while parent do
-                                if parent.Name == "Rayfield" or parent.Name:lower():find("rayfield") then
-                                    isRayfield = true; break
+            pcall(function()
+                for _, gui in ipairs(guis) do
+                    if gui then
+                        for _, obj in ipairs(gui:GetDescendants()) do
+                            if obj:IsA("TextLabel") and obj.Text ~= "" then
+                                local isRayfield = false
+                                local parent = obj
+                                while parent do
+                                    if parent.Name == "Rayfield" or parent.Name:lower():find("rayfield") then
+                                        isRayfield = true; break
+                                    end
+                                    parent = parent.Parent
                                 end
-                                parent = parent.Parent
-                            end
-                            
-                            if not isRayfield then
-                                local txt = obj.Text
-                                if txt:match("%d+%s*[%+%-%*xх/]%s*%d+") then
-                                    equation = txt; activeGui = gui; break
+                                
+                                if not isRayfield then
+                                    local txt = obj.Text
+                                    if txt:match("%d+%s*[%+%-%*xх/]%s*%d+") then
+                                        equation = txt; activeGui = gui; break
+                                    end
                                 end
                             end
                         end
                     end
+                    if equation then break end
                 end
-                if equation then break end
-            end
+            end)
 
             if equation and equation ~= lastSolvedEquation then
                 isIQTestActive = true
                 lastSolvedEquation = equation
-                iqWarningSent = false -- Сбрасываем таймер уведомлений после теста
+                iqWarningSent = false
                 print("[SWILL IQ] Найден пример: " .. equation)
                 task.wait(1)
 
-                local cleanEq = equation:lower():gsub("%s+", ""):gsub("x", "*"):gsub("х", "*"):gsub("=", ""):gsub("%?", "")
-                local success, result = pcall(function() return loadstring("return " .. cleanEq)() end)
-                
-                if success and type(result) == "number" then
-                    local answer = tostring(math.floor(result))
-                    print("[SWILL IQ] Ответ: " .. answer)
-                    
-                    local foundButton = false
-                    for _, btn in ipairs(activeGui:GetDescendants()) do
-                        if btn:IsA("TextButton") or btn:IsA("TextLabel") then
-                            if btn.Text == answer or btn.Text == tostring(answer) .. " " then
-                                local pos = Vector2.new(btn.AbsolutePosition.X + btn.AbsoluteSize.X / 2, btn.AbsolutePosition.Y + btn.AbsoluteSize.Y / 2)
-                                VirtualUser:ClickButton1(pos)
-                                foundButton = true
-                                print("[SWILL IQ] Нажата кнопка с ответом: " .. answer)
-                                break
+                pcall(function()
+                    local cleanEq = equation:lower():gsub("%s+", ""):gsub("x", "*"):gsub("х", "*"):gsub("=", ""):gsub("%?", "")
+                    local func, err = loadstring("return " .. cleanEq)
+                    if func then
+                        local success, result = pcall(func)
+                        if success and type(result) == "number" then
+                            local answer = tostring(math.floor(result))
+                            print("[SWILL IQ] Ответ: " .. answer)
+                            
+                            local foundButton = false
+                            for _, btn in ipairs(activeGui:GetDescendants()) do
+                                if btn:IsA("TextButton") or btn:IsA("TextLabel") then
+                                    if btn.Text == answer or btn.Text == tostring(answer) .. " " then
+                                        local pos = Vector2.new(btn.AbsolutePosition.X + btn.AbsoluteSize.X / 2, btn.AbsolutePosition.Y + btn.AbsoluteSize.Y / 2)
+                                        VirtualUser:ClickButton1(pos)
+                                        foundButton = true
+                                        print("[SWILL IQ] Нажата кнопка с ответом: " .. answer)
+                                        break
+                                    end
+                                end
                             end
                         end
                     end
-                end
+                end)
                 task.wait(3)
                 isIQTestActive = false
             end
@@ -526,7 +532,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ============================ БАЗОВЫЕ ФУНКЦИИ ============================
+-- ============================ БАЗОВЫЕ ФУНКЦИИ (АНТИ-ТУМАН) ============================
 local function getRoot() local char = p.Character; return char and char:FindFirstChild("HumanoidRootPart") end
 local triggers, visited, order = {}, {}, 0
 local startPos, lastPos, currentProgress = nil, nil, 0
@@ -556,22 +562,16 @@ local function isDangerous(pos)
     return false
 end
 
-local function pickTarget(hPos, hCFrame)
+-- Выбор ближайшего триггера (без фильтра направления)
+local function pickTarget(hPos)
     local best, bestScore = nil, math.huge
     for _, t in ipairs(triggers) do
         local o = t.part
         if o and o.Parent and not visited[o] then
             local po = o.Position
             if isDangerous(po) then visited[o] = true; continue end
-            
-            local dirToTarget = (po - hPos).Unit
-            local lookVector = hCFrame.LookVector
-            local dot = dirToTarget:Dot(lookVector)
-            
-            if dot > -0.5 then
-                local d = (po - hPos).Magnitude
-                if d < bestScore then bestScore, best = d, o end
-            end
+            local d = (po - hPos).Magnitude
+            if d < bestScore then bestScore, best = d, o end
         end
     end
     return best
@@ -614,13 +614,15 @@ local function startFarm()
             local h = getRoot()
             if h then
                 local hPos = h.Position
-                local hCFrame = h.CFrame
                 if not startPos then startPos, lastPos, currentProgress = hPos, hPos, 0 end
-                local target = pickTarget(hPos, hCFrame)
+                local target = pickTarget(hPos)
                 
                 if target then
                     markPair(target)
+                    -- Анти-туман: разворачиваем персонажа лицом к цели и обнуляем скорость
                     h.CFrame = CFrame.new(target.Position + Vector3.new(0, 3, 0), target.Position)
+                    h.AssemblyLinearVelocity = Vector3.zero
+                    
                     lastPos = target.Position
                     local dist = (target.Position - startPos).Magnitude
                     if dist > currentProgress then currentProgress = dist end
@@ -779,7 +781,7 @@ TabFun:CreateButton({ Name = "🔊 Bass Meme", Callback = function() playSound("
 TabFun:CreateButton({ Name = "🔊 Vine Boom", Callback = function() playSound("5153476613", true) end })
 TabFun:CreateButton({ Name = "🔊 Bruh", Callback = function() playSound("5153290981", true) end })
 
-Rayfield:Notify("Скрипт загружен! Уведомления IQ-теста и Фарма активны.")
+Rayfield:Notify("Скрипт загружен! Автофарм исправлен.")
 
 task.spawn(function()
     while true do
