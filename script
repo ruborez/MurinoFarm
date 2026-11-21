@@ -1,5 +1,5 @@
 -- Murino Horror | Ultra UI (Rayfield) | Solara/Xeno
--- Исправлено: Анти-Туман (поворот перед ТП), Пауза фарма на IQ-тесте
+-- Обновлено: Уведомления IQ-теста (за 1 мин) и Автофарма
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
@@ -13,11 +13,11 @@ local Window = Rayfield:CreateWindow({
     KeySettings = {
         Title = "Murino Farm Pro",
         Subtitle = "Key System | by ruborez",
-        Note = "Введи ключ для доступа.",
+        Note = "Введи ключ для доступа.\nТестовый ключ: byrger",
         FileName = "MurinoKey.txt",
         SaveKey = true,
         GrabKeyFromSite = false, 
-        Key = {"alica"}
+        Key = {"byrger"}
     }
 })
 
@@ -49,7 +49,8 @@ local Settings = {
     Nametag = false, ShowFloorRoom = false
 }
 
-local isIQTestActive = false -- Глобальный флаг для паузы фарма
+local isIQTestActive = false 
+local iqWarningSent = false -- Флаг, чтобы не спамить уведомлением
 
 -- ============================ НИК НАД ГОЛОВОЙ ============================
 local function updateNametag()
@@ -94,7 +95,39 @@ local function playSound(id, isGlobal)
     end)
 end
 
--- ============================ УМНЫЙ AUTO-IQ (С ПАУЗОЙ ФАРМА) ============================
+-- ============================ ТАЙМЕР IQ-ТЕСТА (УВЕДОМЛЕНИЕ ЗА 1 МИНУТУ) ============================
+task.spawn(function()
+    while true do
+        task.wait(1)
+        if not Settings.AutoIQ then continue end
+        
+        local guis = {p:FindFirstChild("PlayerGui"), game:GetService("CoreGui")}
+        for _, gui in ipairs(guis) do
+            if gui then
+                for _, obj in ipairs(gui:GetDescendants()) do
+                    if obj:IsA("TextLabel") then
+                        local txt = obj.Text:lower()
+                        -- Ищем таймер с "IQ" или "тест" и двоеточием (например, 01:00)
+                        if (txt:find("iq") or txt:find("тест")) and txt:find(":") then
+                            local min, sec = txt:match("(%d+):(%d+)")
+                            if min and sec then
+                                min, sec = tonumber(min), tonumber(sec)
+                                local totalSec = (min * 60) + sec
+                                -- Если осталось от 55 до 60 секунд, и уведомление еще не отправлено
+                                if totalSec <= 60 and totalSec > 55 and not iqWarningSent then
+                                    iqWarningSent = true
+                                    Rayfield:Notify({Title = "Внимание!", Content = "IQ-тест через 1 минуту! Приготовься.", Duration = 5})
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- ============================ УМНЫЙ AUTO-IQ ============================
 local autoIQThread = nil
 local lastSolvedEquation = ""
 
@@ -109,7 +142,6 @@ local function startAutoIQ()
             local equation = nil
             local activeGui = nil
             
-            -- Ищем текст с примером, ИГНОРИРУЯ Rayfield
             for _, gui in ipairs(guis) do
                 if gui then
                     for _, obj in ipairs(gui:GetDescendants()) do
@@ -138,6 +170,7 @@ local function startAutoIQ()
             if equation and equation ~= lastSolvedEquation then
                 isIQTestActive = true
                 lastSolvedEquation = equation
+                iqWarningSent = false -- Сбрасываем таймер уведомлений после теста
                 print("[SWILL IQ] Найден пример: " .. equation)
                 task.wait(1)
 
@@ -160,9 +193,7 @@ local function startAutoIQ()
                             end
                         end
                     end
-                    if not foundButton then print("[SWILL IQ] Кнопка с ответом не найдена!") end
                 end
-                -- Ждем 3 секунды после теста, чтобы игра вернула управление
                 task.wait(3)
                 isIQTestActive = false
             end
@@ -181,23 +212,15 @@ hudFrame.Position = UDim2.new(0, 10, 0, 70)
 hudFrame.BackgroundTransparency = 1
 
 local floorLabel = Instance.new("TextLabel", hudFrame)
-floorLabel.Size = UDim2.new(1, 0, 0.5, 0)
-floorLabel.BackgroundTransparency = 1
-floorLabel.TextColor3 = Color3.fromRGB(255, 150, 0)
-floorLabel.Font = Enum.Font.GothamBold
-floorLabel.TextSize = 16
-floorLabel.TextXAlignment = Enum.TextXAlignment.Left
-floorLabel.Text = "Этаж: ?"
+floorLabel.Size = UDim2.new(1, 0, 0.5, 0); floorLabel.BackgroundTransparency = 1
+floorLabel.TextColor3 = Color3.fromRGB(255, 150, 0); floorLabel.Font = Enum.Font.GothamBold
+floorLabel.TextSize = 16; floorLabel.TextXAlignment = Enum.TextXAlignment.Left; floorLabel.Text = "Этаж: ?"
 
 local roomLabel = Instance.new("TextLabel", hudFrame)
-roomLabel.Size = UDim2.new(1, 0, 0.5, 0)
-roomLabel.Position = UDim2.new(0, 0, 0.5, 0)
-roomLabel.BackgroundTransparency = 1
-roomLabel.TextColor3 = Color3.fromRGB(0, 200, 255)
-roomLabel.Font = Enum.Font.GothamBold
-roomLabel.TextSize = 16
-roomLabel.TextXAlignment = Enum.TextXAlignment.Left
-roomLabel.Text = "Комнат: ?"
+roomLabel.Size = UDim2.new(1, 0, 0.5, 0); roomLabel.Position = UDim2.new(0, 0, 0.5, 0)
+roomLabel.BackgroundTransparency = 1; roomLabel.TextColor3 = Color3.fromRGB(0, 200, 255)
+roomLabel.Font = Enum.Font.GothamBold; roomLabel.TextSize = 16
+roomLabel.TextXAlignment = Enum.TextXAlignment.Left; roomLabel.Text = "Комнат: ?"
 
 RunService.RenderStepped:Connect(function()
     if not Settings.ShowFloorRoom then hudFrame.Visible = false; return end
@@ -503,7 +526,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ============================ БАЗОВЫЕ ФУНКЦИИ (АНТИ-ТУМАН) ============================
+-- ============================ БАЗОВЫЕ ФУНКЦИИ ============================
 local function getRoot() local char = p.Character; return char and char:FindFirstChild("HumanoidRootPart") end
 local triggers, visited, order = {}, {}, 0
 local startPos, lastPos, currentProgress = nil, nil, 0
@@ -533,7 +556,6 @@ local function isDangerous(pos)
     return false
 end
 
--- Умный выбор цели (игнорируем те, что сзади)
 local function pickTarget(hPos, hCFrame)
     local best, bestScore = nil, math.huge
     for _, t in ipairs(triggers) do
@@ -542,12 +564,11 @@ local function pickTarget(hPos, hCFrame)
             local po = o.Position
             if isDangerous(po) then visited[o] = true; continue end
             
-            -- Проверка направления (не идем назад)
             local dirToTarget = (po - hPos).Unit
             local lookVector = hCFrame.LookVector
             local dot = dirToTarget:Dot(lookVector)
             
-            if dot > -0.5 then -- Если цель не сзади
+            if dot > -0.5 then
                 local d = (po - hPos).Magnitude
                 if d < bestScore then bestScore, best = d, o end
             end
@@ -588,7 +609,7 @@ local function startFarm()
     farmThread = task.spawn(function()
         while Settings.AutoFarm do
             task.wait(Settings.Delay)
-            if isIQTestActive then task.wait(1); continue end -- ПАУЗА ФАРМА НА IQ ТЕСТЕ
+            if isIQTestActive then task.wait(1); continue end
             
             local h = getRoot()
             if h then
@@ -599,7 +620,6 @@ local function startFarm()
                 
                 if target then
                     markPair(target)
-                    -- АНТИ-ТУМАН: Разворачиваем персонажа лицом к цели и ТП
                     h.CFrame = CFrame.new(target.Position + Vector3.new(0, 3, 0), target.Position)
                     lastPos = target.Position
                     local dist = (target.Position - startPos).Magnitude
@@ -643,8 +663,10 @@ FarmToggle = TabNormal:CreateToggle({
             if v then 
                 if FarmToggle2 then FarmToggle2:Set(false) end
                 startFarm() 
+                Rayfield:Notify({Title = "Автофарм", Content = "Автофарм ВКЛЮЧЕН", Duration = 3})
             else 
                 stopFarm() 
+                Rayfield:Notify({Title = "Автофарм", Content = "Автофарм ВЫКЛЮЧЕН", Duration = 3})
             end
         end)
         isSyncing = false
@@ -673,8 +695,10 @@ FarmToggle2 = TabManiac:CreateToggle({
             if v then 
                 if FarmToggle then FarmToggle:Set(false) end
                 startFarm() 
+                Rayfield:Notify({Title = "Автофарм", Content = "Автофарм ВКЛЮЧЕН", Duration = 3})
             else 
                 stopFarm() 
+                Rayfield:Notify({Title = "Автофарм", Content = "Автофарм ВЫКЛЮЧЕН", Duration = 3})
             end
         end)
         isSyncing = false
@@ -683,7 +707,7 @@ FarmToggle2 = TabManiac:CreateToggle({
 TabManiac:CreateDropdown({ Name = "Режим выбора", Options = {"Nearest"}, CurrentOption = "Nearest", Flag = "mode_maniac", Callback = function(opt) Settings.Mode = opt end })
 TabManiac:CreateSlider({ Name = "Задержка (сек)", Range = {0.1, 1}, Increment = 0.05, Suffix = "сек", CurrentValue = 0.3, Flag = "delay_maniac", Callback = function(v) Settings.Delay = v end })
 TabManiac:CreateSection("Помощник")
-TabManiac:CreateToggle({ Name = "Умный Авто IQ-тест (4 ответа)", CurrentValue = false, Flag = "auto_iq", Callback = function(v) if v then startAutoIQ() else stopAutoIQ() end end })
+TabManiac:CreateToggle({ Name = "Умный Авто IQ-тест", CurrentValue = false, Flag = "auto_iq", Callback = function(v) if v then startAutoIQ() else stopAutoIQ() end end })
 
 -- ДВИЖЕНИЕ
 TabMove:CreateSection("Основное")
@@ -755,7 +779,7 @@ TabFun:CreateButton({ Name = "🔊 Bass Meme", Callback = function() playSound("
 TabFun:CreateButton({ Name = "🔊 Vine Boom", Callback = function() playSound("5153476613", true) end })
 TabFun:CreateButton({ Name = "🔊 Bruh", Callback = function() playSound("5153290981", true) end })
 
-Rayfield:Notify("Скрипт загружен! Анти-Туман активен.")
+Rayfield:Notify("Скрипт загружен! Уведомления IQ-теста и Фарма активны.")
 
 task.spawn(function()
     while true do
